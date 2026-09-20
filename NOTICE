@@ -1,0 +1,72 @@
+TradingAgents-India
+Copyright 2026 Aditya Rane
+
+This product includes software developed by Tauric Research as part of the
+TradingAgents project:
+
+    TradingAgents: Multi-Agents LLM Financial Trading Framework
+    https://github.com/TauricResearch/TradingAgents
+    Copyright Tauric Research
+    Licensed under the Apache License, Version 2.0
+
+The original work is used under the Apache License, Version 2.0, a copy of
+which is included in the LICENSE file in this repository. The overwhelming
+majority of this codebase — the multi-agent architecture, the analyst,
+researcher, trader and risk-management agents, the LangGraph orchestration,
+the data-vendor routing layer, the CLI, and the provider integrations — is the
+original authors' work, not this repository's.
+
+Paper:
+
+    Yijia Xiao, Edward Sun, Di Luo, Wei Wang.
+    "TradingAgents: Multi-Agents LLM Financial Trading Framework."
+    arXiv:2412.20138 (2025). https://arxiv.org/abs/2412.20138
+
+
+MODIFICATIONS
+=============
+
+Per Apache License 2.0 §4(b), the following states the changes made to the
+original work. This repository tracks upstream TradingAgents (merged through
+v0.5.0) and adds a data layer for Indian equities:
+
+New files:
+  tradingagents/dataflows/india_data_common.py   shared validation, throttling,
+                                                 caching and look-ahead guards
+  tradingagents/dataflows/nse_india.py           NSE: FII/DII flows, India VIX,
+                                                 Nifty put-call ratio, promoter
+                                                 shareholding, corporate actions,
+                                                 exchange announcements
+  tradingagents/dataflows/rbi_rates.py           RBI policy rates (repo, SDF,
+                                                 MSF, bank rate, CRR, SLR)
+  tradingagents/dataflows/screener_in.py         optional FII/DII ownership split
+  tradingagents/dataflows/india_context.py       assembles the above into the
+                                                 news and fundamentals prompts
+  tradingagents/dataflows/india_news.py          Economic Times / Mint RSS vendor
+  tradingagents/dataflows/india_universe.py      Nifty 50 ticker universe
+  scripts/analyze_india_universe.py              batch runner
+  scripts/verify_india_sources.py                live source cross-check
+  scripts/build_report_dashboard.py              offline HTML report viewer
+
+Modified files:
+  tradingagents/agents/analysts/news_analyst.py          India market context
+  tradingagents/agents/analysts/fundamentals_analyst.py  ownership context,
+                                                         currency caveats
+  tradingagents/agents/analysts/sentiment_analyst.py     regional subreddits
+  tradingagents/agents/analysts/market_analyst.py        India VIX, configurable
+                                                         indicator budget
+  tradingagents/agents/utils/agent_utils.py              currency-mismatch guard
+  tradingagents/dataflows/reddit.py                      India subreddit routing
+  tradingagents/dataflows/stocktwits.py                  NSE/BSE symbol handling
+  tradingagents/dataflows/fred.py                        India macro aliases,
+                                                         staleness warnings
+  tradingagents/dataflows/stockstats_utils.py            damaged-cache detection
+  tradingagents/dataflows/utils.py                       '&' in NSE tickers
+  tradingagents/dataflows/interface.py                   India news vendor
+  tradingagents/graph/trading_graph.py                   regional news queries
+  tradingagents/default_config.py                        India and free-tier
+                                                         configuration
+  README.md                                              documents the above
+
+This is not financial, investment, or trading advice. See the disclaimer in
+the original project: https://tauric.ai/disclaimer/

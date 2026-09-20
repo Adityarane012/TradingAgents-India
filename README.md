@@ -27,6 +27,31 @@
 
 ---
 
+# TradingAgents-India
+
+> ### A fork of [TradingAgents](https://github.com/TauricResearch/TradingAgents) by [Tauric Research](https://tauric.ai)
+>
+> **Essentially all of this framework is their work.** The multi-agent
+> architecture, the analyst/researcher/trader/risk agents, the LangGraph
+> orchestration, the data-vendor routing, the CLI and every provider
+> integration were built by Tauric Research and are used here under the
+> Apache 2.0 licence. Please star and cite [the original
+> repository](https://github.com/TauricResearch/TradingAgents) and
+> [their paper](https://arxiv.org/abs/2412.20138) — the citation block at the
+> bottom of this README is theirs and is reproduced unchanged.
+>
+> **What this fork adds** is a data layer for Indian equities: NSE
+> institutional flows, India VIX, the Nifty put-call ratio, promoter
+> shareholding and exchange filings; RBI policy rates; an optional FII/DII
+> ownership split; and a zero-cost configuration that runs the whole pipeline
+> on free API tiers. `NOTICE` lists every file added or changed, as Apache 2.0
+> §4(b) requires.
+>
+> Tracks upstream through **v0.5.0**. Not financial advice — see the original
+> project's [disclaimer](https://tauric.ai/disclaimer/).
+
+---
+
 # TradingAgents: Multi-Agents LLM Financial Trading Framework
 
 ## News
@@ -457,7 +482,8 @@ Contributions are welcome: bug fixes, documentation, and feature ideas; past con
 
 ## Citation
 
-Please reference our work if you find *TradingAgents* provides you with some help :)
+The citation below is for the original TradingAgents work by Tauric Research.
+If this framework helps you, please cite **their** paper — not this fork.
 
 ```
 @misc{xiao2025tradingagentsmultiagentsllmfinancial,
