@@ -16,6 +16,13 @@ dependencies = [
     "langgraph>=0.4.8",
     "langgraph-checkpoint-sqlite>=2.0.0",
     "pandas>=2.3.0",
+    # HTML parsing for the two India sources that have no API: RBI's policy
+    # rate box (rbi.org.in) and screener.in's shareholding tables. Upstream
+    # dropped parsel in v0.5.0 because nothing there needed it any more; this
+    # fork re-declares it because rbi_rates.py and screener_in.py import it at
+    # module level, and a bare `pip install .` must be able to import the
+    # package. Nothing else in the dependency tree provides it.
+    "parsel>=1.10.0",
     "python-dotenv>=1.0.0",
     "pytz>=2025.2",
     "questionary>=2.1.0",
