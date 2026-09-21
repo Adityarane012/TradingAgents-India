@@ -13,6 +13,7 @@ API quota.
     python scripts/build_report_dashboard.py                  # today
     python scripts/build_report_dashboard.py --date 2026-09-20
     python scripts/build_report_dashboard.py --open           # and open it
+    python scripts/build_report_dashboard.py --latest         # newest report per stock
 """
 
 from __future__ import annotations
@@ -109,7 +110,11 @@ def _inline(text: str) -> str:
     return re.sub(r"(&lt;[^&]*?unavailable[^&]*?&gt;)", r'<span class="sentinel">\1</span>', text)
 
 
-def collect(date: str) -> tuple[list[dict], dict]:
+def collect(date: str | None) -> tuple[list[dict], dict]:
+    """Rows for one run date, or — with ``date=None`` — the latest view per
+    ticker across every date: its most recent successful report, or its most
+    recent failure if it has never succeeded. That is the page to read after a
+    daily refresh, where each stock was last analysed on a different day."""
     results_dir = Path(DEFAULT_CONFIG["results_dir"])
     reports_dir = results_dir / "reports"
     csv_path = results_dir / "india_universe_runs.csv"
@@ -118,18 +123,30 @@ def collect(date: str) -> tuple[list[dict], dict]:
     if csv_path.exists():
         with csv_path.open(encoding="utf-8", newline="") as handle:
             for row in csv.DictReader(handle):
-                if row.get("date") == date:
-                    # Keep the last row per ticker: a re-run supersedes a failure.
+                if date is not None:
+                    if row.get("date") == date:
+                        # Keep the last row per ticker: a re-run supersedes a failure.
+                        rows_by_ticker[row["ticker"]] = row
+                    continue
+                held = rows_by_ticker.get(row["ticker"])
+                is_ok = row.get("status") == "ok"
+                if (
+                    held is None
+                    or (is_ok and held.get("status") != "ok")
+                    or (is_ok == (held.get("status") == "ok")
+                        and row.get("date", "") >= held.get("date", ""))
+                ):
                     rows_by_ticker[row["ticker"]] = row
 
     entries: list[dict] = []
     for ticker, row in sorted(rows_by_ticker.items()):
-        folder = reports_dir / f"{ticker.replace('/', '_')}_{date}"
+        folder = reports_dir / f"{ticker.replace('/', '_')}_{row.get('date', date)}"
         report = folder / "complete_report.md"
         text = report.read_text(encoding="utf-8", errors="replace") if report.exists() else ""
         entries.append({
             "ticker": ticker,
             "company": row.get("company_name") or ticker,
+            "date": row.get("date", ""),
             "status": row.get("status", "?"),
             "signal": row.get("signal") or ("ERROR" if row.get("status") != "ok" else "?"),
             "elapsed": row.get("elapsed_seconds") or "",
@@ -230,6 +247,7 @@ def render(entries: list[dict], stats: dict, date: str) -> str:
         f'<tr class="{"err" if e["status"] != "ok" else ""}" data-i="{i}">'
         f'<td class="tk">{html.escape(e["ticker"])}</td>'
         f'<td>{html.escape(e["company"])}</td>'
+        f'<td class="num-c">{html.escape(e["date"])}</td>'
         f'<td><span class="pill {"p-err" if e["status"] != "ok" else "p-" + e["signal"].split()[0].lower()}">'
         f'{html.escape(e["signal"])}</span></td>'
         f'<td class="num-c">{html.escape(str(e["elapsed"]))}</td>'
@@ -253,7 +271,7 @@ def render(entries: list[dict], stats: dict, date: str) -> str:
 <p class="note">Share of successful reports that cite each source. A low bar is not
 necessarily a fault &mdash; the put-call ratio and repo rate are situational.</p>
 <h2>Tickers <span class="note">&mdash; click a row to read the full report</span></h2>
-<table><thead><tr><th>Ticker</th><th>Company</th><th>Rating</th><th>Secs</th><th>Sources</th></tr></thead>
+<table><thead><tr><th>Ticker</th><th>Company</th><th>Date</th><th>Rating</th><th>Secs</th><th>Sources</th></tr></thead>
 <tbody>{rows}</tbody></table>
 </div>
 <dialog id="d"><div class="dh"><h3 id="dt"></h3><button id="x">Close</button></div>
@@ -276,17 +294,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--date", default=None, help="Run date, yyyy-mm-dd (default: today).")
     ap.add_argument("--out", default=None, help="Output HTML path.")
     ap.add_argument("--open", action="store_true", help="Open it in your browser.")
+    ap.add_argument("--latest", action="store_true",
+                    help="Latest report per ticker across all dates (review_latest.html).")
     args = ap.parse_args(argv)
 
-    date = args.date or get_current_date()
+    date = None if args.latest else (args.date or get_current_date())
+    label = "latest per ticker" if date is None else date
     entries, stats = collect(date)
     if not entries:
-        print(f"No runs recorded for {date}. Use --date to pick another run.")
+        print(f"No runs recorded for {label}. Use --date to pick another run.")
         return 1
 
-    out = Path(args.out) if args.out else Path(DEFAULT_CONFIG["results_dir"]) / f"review_{date}.html"
+    name = "review_latest.html" if date is None else f"review_{date}.html"
+    out = Path(args.out) if args.out else Path(DEFAULT_CONFIG["results_dir"]) / name
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(entries, stats, date), encoding="utf-8")
+    out.write_text(render(entries, stats, label), encoding="utf-8")
     print(f"Wrote {out}")
     print(f"  {out.stat().st_size / 1024:.0f} KB | {stats['ok']}/{stats['total']} analysed | "
           f"ratings: {stats['ratings']}")
