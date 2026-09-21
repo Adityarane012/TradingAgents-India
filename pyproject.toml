@@ -21,9 +21,21 @@ dependencies = [
     # dropped parsel in v0.5.0 because nothing there needed it any more; this
     # fork re-declares it because rbi_rates.py and screener_in.py import it at
     # module level, and a bare `pip install .` must be able to import the
-    # package. Nothing else in the dependency tree provides it.
+    # package. Nothing else in the dependency tree provides it. Its heaviest
+    # transitive dep (lxml) is already required by yfinance, so the marginal
+    # cost here is a few small pure-Python packages.
     "parsel>=1.10.0",
     "python-dotenv>=1.0.0",
+    # The three below are imported directly by this codebase but were only
+    # ever available transitively — pydantic through langchain, dateutil
+    # through pandas, prompt_toolkit through questionary. That works until an
+    # upstream package drops or bounds one of them, at which point the break
+    # appears somewhere unrelated and is hard to trace. If you import it, you
+    # declare it. Floors are set below the versions in use, not pinned to
+    # them, so they cannot fight the resolver.
+    "pydantic>=2.0",             # agents/schemas.py, structured.py, portfolio.py
+    "python-dateutil>=2.8",      # dataflows: y_finance, yfinance_news, alpha_vantage
+    "prompt_toolkit>=3.0",       # cli/main.py
     "pytz>=2025.2",
     "questionary>=2.1.0",
     "requests>=2.32.4",
