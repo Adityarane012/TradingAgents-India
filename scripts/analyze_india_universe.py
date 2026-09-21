@@ -37,8 +37,15 @@ Usage:
     python scripts/analyze_india_universe.py --tickers RELIANCE.NS,TCS.NS,INFY.NS
     python scripts/analyze_india_universe.py --tickers-file my_tickers.txt
 
+    # Stop starting new tickers so the run is finished by a given time
+    # (the daily refresh uses this to stay inside its evening window):
+    python scripts/analyze_india_universe.py --resume --deadline 2026-09-15T19:50
+
 Output: one row per ticker appended to --output (CSV), written incrementally
-so a crash or Ctrl-C never loses completed work. Each ticker's full report
+and flushed to disk after every ticker, so a crash, a power cut or Ctrl-C
+never loses completed work (see tradingagents/dataflows/safe_io.py). Only one
+batch or daily refresh runs at a time; a second one exits immediately rather
+than interleaving rows and spending the same quota twice. Each ticker's full report
 tree is also still written under results_dir by TradingAgentsGraph itself,
 exactly as a single-ticker run would.
 """
@@ -46,7 +53,6 @@ exactly as a single-ticker run would.
 from __future__ import annotations
 
 import argparse
-import csv
 import os
 import sys
 import time
@@ -55,6 +61,12 @@ from pathlib import Path
 
 from tradingagents.agents.utils.rating import is_review
 from tradingagents.dataflows.india_universe import NIFTY_50_APPROX, verify_universe
+from tradingagents.dataflows.safe_io import (
+    AlreadyRunning,
+    append_csv_row,
+    read_complete_rows,
+    single_instance,
+)
 from tradingagents.dataflows.utils import get_current_date, safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG, FREE_TIER_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -86,22 +98,26 @@ def _already_done(output_path: Path, date: str) -> set[str]:
     """Tickers with a completed (status != error) row for this date, for --resume."""
     if not output_path.exists():
         return set()
-    done = set()
-    with output_path.open("r", encoding="utf-8", newline="") as f:
-        for row in csv.DictReader(f):
-            if row.get("date") == date and row.get("status") == "ok":
-                done.add(row["ticker"])
-    return done
+    return {
+        row["ticker"] for row in read_complete_rows(output_path)
+        if row.get("date") == date and row.get("status") == "ok"
+    }
 
 
 def _append_row(output_path: Path, row: dict) -> None:
-    is_new = not output_path.exists()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("a", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        if is_new:
-            writer.writeheader()
-        writer.writerow(row)
+    append_csv_row(output_path, CSV_FIELDS, row)
+
+
+# A free-tier ticker has taken 150-200s. The estimate starts here and only
+# grows, to the slowest ticker seen this run.
+DEFAULT_TICKER_ESTIMATE_S = 240.0
+
+
+def _time_for_another(now: datetime, deadline: datetime | None, estimate_s: float) -> bool:
+    """Whether a ticker started now would finish by the deadline. A ticker
+    that would overrun is not started: it would be killed part-way, wasting
+    its quota, and its triggers are still true tomorrow."""
+    return deadline is None or (deadline - now).total_seconds() >= estimate_s
 
 
 def main() -> int:
@@ -152,6 +168,9 @@ def main() -> int:
                               "promoter shareholding, corporate actions, announcements). "
                               "Use if NSE is blocking your network — each blocked fetch "
                               "costs a timeout before the circuit breaker opens.")
+    parser.add_argument("--deadline", default=None,
+                         help="Local time yyyy-mm-ddThh:mm; no ticker is started that "
+                              "would not finish by then.")
     parser.add_argument("--dry-run", action="store_true",
                          help="Print the plan and exit. No network or LLM calls.")
     parser.add_argument("--verify-only", action="store_true",
@@ -160,6 +179,7 @@ def main() -> int:
 
     universe = _resolve_universe(args)
     date = args.date or get_current_date()
+    deadline = datetime.fromisoformat(args.deadline) if args.deadline else None
 
     if args.verify_only:
         print(f"Verifying {len(universe)} tickers against yfinance...")
@@ -191,6 +211,16 @@ def main() -> int:
             print(f"  [{i}/{len(plan)}] {t}  ({universe.get(t, '?')})")
         return 0
 
+    lock = Path(DEFAULT_CONFIG["results_dir"]) / "refresh.lock"
+    try:
+        with single_instance(lock):
+            return _run(args, universe, plan, date, deadline, output_path)
+    except AlreadyRunning as exc:
+        print(f"Not starting: {exc}. Another batch or daily refresh is running.")
+        return 3
+
+
+def _run(args, universe, plan, date, deadline, output_path) -> int:
     selected_analysts = tuple(a.strip() for a in args.analysts.split(",") if a.strip())
     config = DEFAULT_CONFIG.copy()
     if args.debate_rounds is not None:
@@ -230,7 +260,14 @@ def main() -> int:
     ta = TradingAgentsGraph(selected_analysts=selected_analysts, config=config)
 
     tally: dict[str, int] = {}
+    estimate = DEFAULT_TICKER_ESTIMATE_S
     for i, ticker in enumerate(plan, 1):
+        if not _time_for_another(datetime.now(), deadline, estimate):
+            left = len(plan) - i + 1
+            print(f"\nDeadline {deadline:%H:%M}: not starting the remaining {left} "
+                  f"ticker(s) (~{estimate:.0f}s each would overrun).")
+            tally["NOT STARTED (deadline)"] = left
+            break
         name = universe.get(ticker, ticker)
         print(f"\n[{i}/{len(plan)}] {ticker} ({name}) — {date}", flush=True)
         started = time.monotonic()
@@ -264,11 +301,13 @@ def main() -> int:
             print(f"  -> ERROR: {type(exc).__name__}: {exc}")
             tally["ERROR"] = tally.get("ERROR", 0) + 1
         _append_row(output_path, row)
+        estimate = max(estimate, elapsed)  # a fast failure never lowers it
 
         if i < len(plan) and args.delay:
             time.sleep(args.delay)
 
-    print(f"\nDone. {len(plan)} tickers processed.")
+    ran = sum(n for label, n in tally.items() if not label.startswith("NOT STARTED"))
+    print(f"\nDone. {ran} of {len(plan)} tickers processed.")
     for label, count in sorted(tally.items(), key=lambda kv: -kv[1]):
         print(f"  {label}: {count}")
     print(f"Results: {output_path}")

@@ -27,7 +27,6 @@ decision logic is testable without a network.
 
 from __future__ import annotations
 
-import csv
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -37,6 +36,7 @@ from pathlib import Path
 import pandas as pd
 
 from .errors import VendorError
+from .safe_io import read_complete_rows
 
 logger = logging.getLogger(__name__)
 
@@ -86,20 +86,17 @@ class Assessment:
 def load_last_reports(csv_path: Path) -> dict[str, LastReport]:
     """Latest successful run per ticker from the batch runner's CSV."""
     latest: dict[str, LastReport] = {}
-    if not csv_path.exists():
-        return latest
-    with csv_path.open(encoding="utf-8", newline="") as handle:
-        for row in csv.DictReader(handle):
-            if row.get("status") != "ok":
-                continue
-            try:
-                d = datetime.strptime(row["date"], "%Y-%m-%d").date()
-                run_at = datetime.fromisoformat(row.get("run_at") or row["date"])
-            except (KeyError, ValueError):
-                continue
-            current = latest.get(row["ticker"])
-            if current is None or (d, run_at) > (current.date, current.run_at):
-                latest[row["ticker"]] = LastReport(row["ticker"], d, row.get("signal", ""), run_at)
+    for row in read_complete_rows(csv_path):  # skips a row torn by a crash
+        if row.get("status") != "ok":
+            continue
+        try:
+            d = datetime.strptime(row["date"], "%Y-%m-%d").date()
+            run_at = datetime.fromisoformat(row["run_at"])
+        except (KeyError, ValueError):
+            continue
+        current = latest.get(row["ticker"])
+        if current is None or (d, run_at) > (current.date, current.run_at):
+            latest[row["ticker"]] = LastReport(row["ticker"], d, row.get("signal", ""), run_at)
     return latest
 
 

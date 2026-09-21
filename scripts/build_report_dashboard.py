@@ -19,7 +19,6 @@ API quota.
 from __future__ import annotations
 
 import argparse
-import csv
 import html
 import json
 import re
@@ -27,6 +26,7 @@ import sys
 import webbrowser
 from pathlib import Path
 
+from tradingagents.dataflows.safe_io import atomic_write_text, read_complete_rows
 from tradingagents.dataflows.utils import get_current_date
 from tradingagents.default_config import DEFAULT_CONFIG
 
@@ -120,23 +120,21 @@ def collect(date: str | None) -> tuple[list[dict], dict]:
     csv_path = results_dir / "india_universe_runs.csv"
 
     rows_by_ticker: dict[str, dict] = {}
-    if csv_path.exists():
-        with csv_path.open(encoding="utf-8", newline="") as handle:
-            for row in csv.DictReader(handle):
-                if date is not None:
-                    if row.get("date") == date:
-                        # Keep the last row per ticker: a re-run supersedes a failure.
-                        rows_by_ticker[row["ticker"]] = row
-                    continue
-                held = rows_by_ticker.get(row["ticker"])
-                is_ok = row.get("status") == "ok"
-                if (
-                    held is None
-                    or (is_ok and held.get("status") != "ok")
-                    or (is_ok == (held.get("status") == "ok")
-                        and row.get("date", "") >= held.get("date", ""))
-                ):
-                    rows_by_ticker[row["ticker"]] = row
+    for row in read_complete_rows(csv_path):  # a row torn by a crash is skipped
+        if date is not None:
+            if row.get("date") == date:
+                # Keep the last row per ticker: a re-run supersedes a failure.
+                rows_by_ticker[row["ticker"]] = row
+            continue
+        held = rows_by_ticker.get(row["ticker"])
+        is_ok = row.get("status") == "ok"
+        if (
+            held is None
+            or (is_ok and held.get("status") != "ok")
+            or (is_ok == (held.get("status") == "ok")
+                and row.get("date", "") >= held.get("date", ""))
+        ):
+            rows_by_ticker[row["ticker"]] = row
 
     entries: list[dict] = []
     for ticker, row in sorted(rows_by_ticker.items()):
@@ -308,7 +306,7 @@ def main(argv: list[str] | None = None) -> int:
     name = "review_latest.html" if date is None else f"review_{date}.html"
     out = Path(args.out) if args.out else Path(DEFAULT_CONFIG["results_dir"]) / name
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(entries, stats, label), encoding="utf-8")
+    atomic_write_text(out, render(entries, stats, label))
     print(f"Wrote {out}")
     print(f"  {out.stat().st_size / 1024:.0f} KB | {stats['ok']}/{stats['total']} analysed | "
           f"ratings: {stats['ratings']}")
