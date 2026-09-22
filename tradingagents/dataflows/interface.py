@@ -18,6 +18,7 @@ from .errors import (
     VendorRateLimitError,
 )
 from .fred import get_macro_data as get_fred_macro_data
+from .google_news_india import get_news_google_india
 from .india_news import get_global_news_india
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
 from .sec_edgar import (
@@ -90,6 +91,7 @@ VENDOR_LIST = [
     "polymarket",
     "alpha_vantage",
     "india_rss",
+    "google_news",
 ]
 
 # Optional enrichment categories. These add macro/event context to the news
@@ -135,6 +137,10 @@ VENDOR_METHODS = {
     "get_news": {
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
+        # Google News India edition, NSE/BSE tickers only: anything else
+        # raises NoMarketDataError and falls through to the next vendor, so
+        # "google_news,yfinance" is safe for any ticker.
+        "google_news": get_news_google_india,
     },
     "get_global_news": {
         "yfinance": get_global_news_yfinance,

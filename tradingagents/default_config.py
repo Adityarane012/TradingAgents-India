@@ -109,7 +109,7 @@ FREE_TIER_CONFIG = {
         "core_stock_apis": "yfinance",
         "technical_indicators": "yfinance",
         "fundamental_data": "yfinance",
-        "news_data": "india_rss,yfinance",
+        "news_data": "google_news,india_rss,yfinance",
         "macro_data": "fred",
         "prediction_markets": "polymarket",
     },
@@ -124,6 +124,10 @@ FREE_TIER_CONFIG = {
     "max_risk_discuss_rounds": 1,
     "india_data_enabled": True,
     "screener_enabled": True,
+    # Local, free and quota-neutral: scores the Google News India headlines
+    # before Gemini sees them. Degrades to unscored headlines if torch or the
+    # model is missing, so it is safe to leave on.
+    "local_sentiment": "finbert",
 }
 
 
@@ -224,6 +228,10 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # Increase for longer lookback strategies or to broaden macro coverage;
     # decrease to reduce token usage in agent prompts.
     "news_article_limit": 20,             # max articles per ticker (ticker-news)
+    # Score company-news headlines locally before the LLM sees them. None, or
+    # "finbert" (needs `pip install "tradingagents[sentiment]"`; ~440 MB model,
+    # downloaded once). See tradingagents/dataflows/finbert_sentiment.py.
+    "local_sentiment": None,
     "global_news_article_limit": 10,      # max articles for global/macro news
     "global_news_lookback_days": 7,       # macro news lookback window
     # Reddit is fetched anonymously by default and shares a strict per-IP rate
@@ -281,10 +289,11 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "core_stock_apis": "yfinance",       # Options: alpha_vantage, yfinance
         "technical_indicators": "yfinance",  # Options: alpha_vantage, yfinance
         "fundamental_data": "yfinance",      # Options: alpha_vantage, yfinance
-        "news_data": "yfinance",             # Options: alpha_vantage, yfinance. get_global_news
-                                              # (macro/market news) also accepts "india_rss" (ET +
-                                              # Mint RSS feeds) — not a default, opt in for Indian
-                                              # tickers e.g. "india_rss,yfinance"
+        "news_data": "google_news,yfinance",  # Options: alpha_vantage, yfinance, google_news.
+                                              # google_news (company news, Google News India)
+                                              # serves NSE/BSE tickers only and passes every other
+                                              # ticker on to the next vendor. get_global_news also
+                                              # accepts "india_rss" (ET + Mint RSS feeds).
         "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
         "prediction_markets": "polymarket",  # Options: polymarket (keyless)
     },
