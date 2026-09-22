@@ -113,6 +113,34 @@ _EXCLUDE: dict[str, tuple[str, ...]] = {
     "TRENT.NS": ("Severn Trent", "Alexander-Arnold", "Trent Bridge", "Trent Boult"),
     "ITC.NS": ("input tax credit", "GSTR", "ITC Hotels"),
 }
+
+# Separately listed group companies and fund houses whose names contain this
+# company's name or short form. Measured on 2026-09-22 before this existed:
+# 20 of 59 "SBI" stories were SBI Mutual Fund / SBI Life / SBI Funds, 23 of
+# 47 "Mahindra" stories were Tech Mahindra or Kotak Mahindra, 17 of 44
+# "Kotak" stories were Kotak Securities / Kotak MF. These phrases are removed
+# from a headline before checking it names the company, so "SBI MF buys a
+# stake in X" is dropped but "SBI, SBI Life shares rise" is kept.
+SISTERS: dict[str, tuple[str, ...]] = {
+    "SBIN.NS": ("SBI Mutual Fund", "SBI MF", "SBI Funds", "SBI Life", "SBI Cards", "SBI Card",
+                "SBI General", "SBI Securities", "SBI Caps", "SBICAP"),
+    "M&M.NS": ("Tech Mahindra", "Kotak Mahindra", "Mahindra Finance", "Mahindra & Mahindra "
+               "Financial", "Mahindra Lifespace", "Mahindra Holidays", "Mahindra Logistics",
+               "Mahindra Manulife", "Mahindra CIE"),
+    "KOTAKBANK.NS": ("Kotak Mahindra MF", "Kotak Mahindra Mutual Fund", "Kotak Mutual Fund",
+                     "Kotak MF", "Kotak Securities", "Kotak Mahindra AMC", "Kotak Mahindra Asset",
+                     "Kotak Mahindra Life", "Kotak Life", "Kotak Mahindra Capital",
+                     "Kotak Alternate"),
+    "RELIANCE.NS": ("Reliance Power", "Reliance Infrastructure", "Reliance Infra",
+                    "Reliance Capital", "Reliance Communications", "Reliance Home Finance",
+                    "Reliance Nippon", "Reliance General"),
+    "LT.NS": ("L&T Finance", "L&T Technology", "L&T Tech", "LTTS", "LTIMindtree",
+              "L&T Infotech"),
+    "TMCV.NS": ("Tata Motors Passenger Vehicles", "Tata Motors PV", "TMPV"),
+    "HCLTECH.NS": ("HCL Infosystems", "HCL Foundation"),
+    "ADANIENT.NS": ("Adani Ports", "Adani Green", "Adani Power", "Adani Energy", "Adani Total",
+                    "Adani Wilmar", "Adani Transmission"),
+}
 # Reposts and videos, not reporting.
 _SOCIAL = re.compile(r"facebook|youtube|instagram|x\.com|twitter|threads|linkedin",
                      re.IGNORECASE)
@@ -201,8 +229,10 @@ def company_terms(ticker: str) -> tuple[str, list[str]]:
     return name, list(dict.fromkeys(terms))
 
 
-def _mentions(title: str, terms: list[str]) -> bool:
+def _mentions(title: str, terms: list[str], sisters: tuple[str, ...] = ()) -> bool:
     folded = _fold(title)
+    for sister in sisters:
+        folded = re.sub(rf"(?<![a-z0-9]){re.escape(_fold(sister))}(?![a-z0-9])", " ", folded)
     for term in terms:
         t = _fold(term)
         # Whole-word match, so "BEL" does not match "Belgium".
@@ -288,6 +318,7 @@ def fetch_stories(ticker: str, start: date, end: date) -> tuple[list[Story], int
     key = ticker.strip().upper()
     exclude = [_fold(x) for x in _EXCLUDE.get(key, ())]
     ambiguous = key in AMBIGUOUS
+    sisters = SISTERS.get(key, ())
     raw = _fetch(build_query(ticker, start, end))
     kept: list[tuple[str, str, datetime]] = []
     for item in raw:
@@ -300,7 +331,7 @@ def fetch_stories(ticker: str, start: date, end: date) -> tuple[list[Story], int
             continue
         title, source = _split_source(item.findtext("title") or "", item.findtext("source"))
         if (not title or _QUOTE_PAGE.search(title) or _SOCIAL.search(source)
-                or not _mentions(title, terms)
+                or not _mentions(title, terms, sisters)
                 or (ambiguous and not _MARKET_WORD.search(title))
                 or any(x in _fold(title) for x in exclude)
                 or is_stale_headline(title, day)):

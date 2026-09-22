@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date
 from email.utils import format_datetime
+from xml.sax.saxutils import escape
 
 import pytest
 
@@ -26,8 +27,10 @@ def _item(title, source, day, hour=12):
     from datetime import datetime
 
     when = datetime(day.year, day.month, day.day, hour, 0, tzinfo=IST)
-    return (f"<item><title>{title} - {source}</title><pubDate>{format_datetime(when)}"
-            f"</pubDate><source url='https://x'>{source}</source></item>")
+    # escape() because a real feed does: "Mahindra & Mahindra" is &amp; in the XML.
+    text = escape(f"{title} - {source}")
+    return (f"<item><title>{text}</title><pubDate>{format_datetime(when)}"
+            f"</pubDate><source url='https://x'>{escape(source)}</source></item>")
 
 
 def _rss(*items):
@@ -176,3 +179,19 @@ class TestFinbertInTheBlock:
         feed["items"] = [_item("Nestle India shares fall on FSSAI action", "ET", D)]
         assert "FinBERT" not in gn.get_news_google_india("NESTLEIND.NS", "2026-09-15",
                                                         "2026-09-22")
+
+
+class TestSisterCompanies:
+    @pytest.mark.parametrize("ticker, title, kept", [
+        ("SBIN.NS", "Rossell Techsys approves preferential issue to SBI Mutual Fund", False),
+        ("SBIN.NS", "SBI, SBI Life shares rise 2% on strong credit growth", True),
+        ("M&M.NS", "IT stocks dip: TCS, HCL Tech, Tech Mahindra fall up to 3%", False),
+        ("M&M.NS", "Mahindra & Mahindra shares hit record on SUV sales", True),
+        ("KOTAKBANK.NS", "LIC, Axis Bank: Kotak Securities explains why it prefers them", False),
+        ("KOTAKBANK.NS", "Kotak Mahindra Bank shares rise after RBI lifts curbs", True),
+        ("LT.NS", "LTIMindtree wins $100 million deal", False),
+    ])
+    def test_group_companies_are_not_this_company(self, feed, ticker, title, kept):
+        feed["items"] = [_item(title, "ET", D)]
+        stories, _ = gn.fetch_stories(ticker, date(2026, 9, 15), date(2026, 9, 22))
+        assert bool(stories) is kept
