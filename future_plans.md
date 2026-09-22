@@ -34,39 +34,43 @@ So:
 
 ## Tier 1 — do next (free, highest value)
 
+> **Done so far:** F1 (Google News India) and F4 (FinBERT scoring), both on
+> 2026-09-22. The next highest-value items are F0 then F2, which are what
+> actually raise the number of stocks a day, and F7, which tells you whether
+> any of this produces good calls.
+
 ### F0. Measure requests per ticker before optimising
 Add an LLM callback that counts calls per agent, and write the totals to the
 runs CSV. Today "~15 per ticker" is an estimate. With real numbers, F2 and F5
 can be judged by the calls they save rather than by guesswork.
 *Effort: small.*
 
-### F1. Google News India as a news vendor — **verified 2026-09-22**
-`https://news.google.com/rss/search?q="<company>"&hl=en-IN&gl=IN&ceid=IN:en`
-needs no key.
+### F1. Google News India as a news vendor — ✅ **done 2026-09-22**
+`tradingagents/dataflows/google_news_india.py`, first in the `get_news` chain.
 
-Live test, last 7 days:
+Why it mattered more than expected: for 15–22 Sep, **Yahoo returned zero
+articles** for NESTLEIND, BHARTIARTL, ULTRACEMCO and TCS. The analysts had no
+company news at all beyond NSE filings. Google News returned 36–100 results per
+stock from 30–70 outlets, including Reuters and Bloomberg on FSSAI's action
+against Nestle India.
 
-| Company | Articles | Sources |
-|---|---|---|
-| Bharti Airtel | 72 | 32 |
-| Nestle India | 100 | 69 |
-| UltraTech Cement | 46 | 31 |
+Filters, each aimed at noise found in live results: disambiguation (a "Trent"
+search returns footballers, "ITC" returns GST input tax credit), sister
+companies (SBI Mutual Fund is not State Bank; 30–50% of hits before the fix),
+quote pages, social reposts, stale re-dated pages, and near-duplicate merging
+that keeps an outlet count as a rough importance signal. No look-ahead: the
+query is bounded with `after:`/`before:` and every item is re-checked in IST.
 
-The Nestle results included Reuters, Bloomberg and The Hindu on FSSAI's legal
-action. Yahoo's feed has nothing like this coverage for Indian names.
+Output is about 500 tokens per stock for ~15 distinct stories.
 
-It needs cleaning before it goes into a prompt:
-
-- **Date filter.** Filter `pubDate <= trade date` and use `after:`/`before:`
-  in the query for historical runs, so there is no look-ahead.
-- **De-duplication.** The same story appears across 5–10 outlets.
-- **Junk removal.** Drop quote pages such as "Option Chain - Live".
-- **Stale-content check.** One item dated 17-Sep described a July board meeting.
-- **Size cap.** The feed caps at about 100 items with no pagination.
-
-Wire it into the news and sentiment analysts behind the existing
-`news_data` vendor chain. *Effort: medium. Impact: the biggest data-quality gain
-available.*
+### F1b. Remaining polish on the news feed — open
+- Merging is word-overlap based, so heavily reworded versions of one story
+  still split. Sentence embeddings would fix it; that is another model to load.
+- The noise filters are per-ticker lists tuned on one week of results. Check
+  them again after a few weeks, especially for names outside the Nifty 50,
+  which get no alias or sister list at all.
+- `get_global_news` still uses the ET/Mint feeds. The same search could serve
+  macro headlines.
 
 ### F2. Pre-compute the market analyst's indicators
 The market analyst spends several requests fetching prices and then up to
@@ -84,20 +88,22 @@ The news analyst and the sentiment analyst each fetch company news. Fetch once,
 de-duplicate, and give each analyst the part it needs. This cuts duplicate
 tokens and duplicate vendor calls. *Effort: small.*
 
-### F4. Score headlines locally with FinBERT (open source)
-`ProsusAI/finbert` runs on a CPU, scores each headline as
-positive/negative/neutral, and costs nothing per call. The sentiment analyst
-would then get "34 headlines: 21 negative, 9 neutral, 4 positive; top 8 by
-relevance: ..." instead of all 34.
+### F4. Score headlines locally with FinBERT — ✅ **done 2026-09-22**
+`tradingagents/dataflows/finbert_sentiment.py`, on in the free preset
+(`local_sentiment="finbert"`), optional extra `tradingagents[sentiment]`.
 
-- **Benefit:** a large token cut per call and a consistent, reproducible
-  sentiment baseline.
-- **Cost:** a PyTorch dependency, about 1 GB of download, a few seconds per
-  ticker on a CPU.
-- **Why optional:** keep it opt-in (`local_sentiment=True`) so a plain install
-  stays light. It does not reduce the request count (see §0).
+Measured before enabling: agreed with hand labels on **13 of 16** real Nifty 50
+headlines. Its two systematic misses were broker rating actions ("Rated Sell",
+"maintains BUY") read as neutral, now labelled by rule before the model runs.
+On the RTX 3050 it loads in ~1 s and scores 160 headlines in ~0.4 s; the model
+is ~440 MB, downloaded once, then loaded offline.
 
-*Effort: medium.*
+It does **not** cut requests (§0), and it slightly increases tokens. What it
+buys is a consistent baseline the LLM can be checked against.
+
+Still open: nothing verifies FinBERT against what prices did next. Fold it into
+F7 — if its tally has no relationship to the following week's return, it is
+decoration.
 
 ### F5. Local model for the quick-thinking roles (zero quota)
 Run `quick_think_llm` on a local open-weight model through Ollama. That covers
@@ -161,20 +167,19 @@ first.
 
 ## Tier 3 — news APIs with keys (free tiers)
 
-Try these after F1. They add entity tagging and sentiment scores, which save
-LLM work, not just raw volume.
+With F1 and F4 done, none of these is needed. Kept for reference if the Google
+feed degrades.
 
 | API | Free tier | Why it's interesting | Watch out |
 |---|---|---|---|
-| **Marketaux** | ~100 requests/day (per its listing) | Tags articles with the stocks they mention and a sentiment score from −1 to 1; 5,000+ sources | **To verify:** depth of NSE ticker coverage. 100/day fits one call per Nifty 50 name |
+| ~~Marketaux~~ | 100 requests/day, **3 articles per request**, no entity sentiment | — | ❌ **Rejected 2026-09-22** (checked on its pricing page). 3 headlines per stock is far less than Google News gives, and the sentiment scores that made it attractive are not in the free plan. FinBERT supplies those locally |
 | **NewsData.io** | 200 credits/day, commercial use allowed | Broad, 80+ languages | Keyword search only; no entity tags |
 | GNews | 100/day, development use only | Simple | No full text |
 | NewsAPI.org | Developer plan, effectively localhost only, delayed | — | Weakest fit |
 | GDELT | Free, no key | Global, with a "tone" score per article | **To verify:** Indian business coverage; the data is noisy |
 
-The Google News feed (F1) is free with no key and has the most coverage, so it
-comes first. Marketaux is the best second source, because it pre-computes
-sentiment.
+A key-based API only earns its place if it carries Indian business news the
+Google feed misses. Check that before adding one.
 
 ---
 
@@ -194,6 +199,11 @@ sentiment.
 
 ## Tier 5 — smoothing the daily process
 
+- **The 7 PM run needs the laptop awake and logged in.** On 2026-09-22 the
+  task fired at 21:28 instead of 19:00 (the machine was unavailable at 19:00)
+  and correctly did nothing, because the window had passed. If that repeats,
+  re-register with `-Wake`, or widen the window, or accept that a missed
+  evening is caught up the next day.
 - **Weekend catch-up run.** Saturday has the full quota and no competing manual
   runs. It could clear anything deferred during the week.
 - **Quota guard.** Before a manual batch on a weekday, warn if it would eat into

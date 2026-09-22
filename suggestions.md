@@ -23,7 +23,7 @@ mistake.
 | 3.2 | Global series + crude oil | ✅ | The FRED aliases existed. **Crude added 2026-09-22**: Brent and USD/INR go to the news analyst (`india_relative.commodity_fx_block`). |
 | 3.3 | NSE India API | ✅ | `nse_india.py`: FII/DII, India VIX, Nifty level, PCR, shareholding, corporate actions and announcements. The sketch in §3.3 is wrong: its endpoint 404s and its cookie handshake is unneeded. |
 | 3.4 | RBI DBIE | ⚠️ | DBIE's certificate is broken; repo/SDF/MSF/CRR/SLR come from the rbi.org.in homepage. **Not done:** WPI, forex reserves, external debt (see future_plans.md). |
-| 4.1 | Indian retail platforms | ⚠️ | Reddit India subs ✅, StockTwits ✅. X ❌ (paid, $100+/mo). Telegram ❌ (needs a bot and joined channels; no search API). Moneycontrol forums ❌ (scraping only, no API). |
+| 4.1 | Indian retail platforms | ⚠️ | Reddit India subs ✅, StockTwits ✅, and since 2026-09-22 Google News India carries Moneycontrol/ET/Mint headlines without scraping them. X ❌ (paid, $100+/mo). Telegram ❌ (needs a bot and joined channels; no search API). Marketaux ❌ (free plan: 3 articles per request, no sentiment). |
 | 4.2 | Indian subreddits | ⚠️ | Region-routed, not the one-line swap, which would have degraded US tickers. r/DalalStreet was dropped: no posts since Jan 2024. |
 | 4.3 | StockTwits suffix | ⚠️ | A verified ADR allowlist. Stripping the suffix mapped TCS→Container Store and ITC→a US utility. |
 | 4.4 | X/Twitter | ❌ | Paid API, and this is a zero-budget project. |
@@ -36,7 +36,7 @@ mistake.
 | 6.3 | Sentiment India context | ✅ | `sentiment_analyst.py` routes to and describes the India subreddits. |
 | 6.4 | Market analyst India context | ⚠️ | India VIX ✅. Expiry volatility ✅ (weekday not named). "Round-number levels" ❌: unfalsifiable folklore. |
 | 7.1 | NSE module | ✅ | See 3.3. |
-| 7.2 | India news RSS | ⚠️ | Economic Times + Mint (`india_news.py`). Business Standard 403s; Financial Express serves HTML. **Google News India RSS tested 2026-09-22**: 46–100 items per stock per week, from 30–70 sources. It is the top item in future_plans.md. |
+| 7.2 | India news RSS | ✅ **completed 2026-09-22** | Economic Times + Mint for macro (`india_news.py`), and **Google News India for company news** (`google_news_india.py`), now first in the news chain. Yahoo returned *zero* articles for four Nifty names that week; Google News returned 36–100 each. Business Standard 403s; Financial Express serves HTML. |
 | 7.3 | NSE corporate announcements | ✅ | Plus triage: routine filings are summarised, material ones quoted. |
 | 7.4 | SEBI filings scraper | ❌ | Superseded: NSE shareholding and announcements cover the promoter and acquisition cases. Pledging is the gap (see 6.2). |
 | 7.5 | India VIX | ✅ | See 6.4. |
@@ -524,7 +524,7 @@ india_vix_data = get_YFin_data_online("^INDIAVIX", start_date, end_date)
 | StockTwits has thin India coverage | ✅ Mitigated | Verified ADR allowlist; thin by nature |
 | No FII/DII flow data | ✅ Resolved | nse_india.py |
 | No India VIX integration | ✅ Resolved | Market analyst guidance + NSE level |
-| No Moneycontrol or ET dedicated news vendor | ⚠️ Partly | ET + Mint RSS built; Google News India is next (future_plans.md) |
+| No Moneycontrol or ET dedicated news vendor | ✅ Resolved | ET + Mint RSS for macro; Google News India for company news, incl. Moneycontrol headlines |
 | No India F&O/derivative awareness in prompts | ✅ Resolved | Expiry guidance + live Nifty PCR |
 | FRED still fetches US macro by default | ✅ By design | DXY/VIX/Fed drive FII flows |
 | No GST/IIP/PMI data integration | ❌ Open | No free structured API; see future_plans.md |
