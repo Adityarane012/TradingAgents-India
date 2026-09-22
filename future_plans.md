@@ -190,7 +190,8 @@ Google feed misses. Check that before adding one.
 | **Promoter pledging** | BSE publishes SAST/pledge disclosures, possibly behind a JSON API like NSE's | To verify. NSE's pledge endpoint returns empty; screener has no pledge data (checked 2026-09-21) |
 | **Event calendar** (RBI MPC dates, results dates) | NSE has an event-calendar page, probably an API behind it; RBI publishes MPC dates in press releases | To verify. Would let prompts say "results are due in 3 days" instead of generic watch-items |
 | RBI forex reserves, WPI | RBI's Weekly Statistical Supplement | To verify: format (HTML/PDF) |
-| GST, IIP, PMI | MoSPI's newer data portal may have an API | To verify |
+| CPI, WPI, IIP (and GDP, employment) | **MoSPI e-Sankhyiki — verified live 2026-09-22.** `https://api.mospi.gov.in`, keyless GET, e.g. `/api/wpi/getWpiRecords?year=2026` returned WPI April 2026 = 167. Also `/api/cpi/getCPIIndex`, `/api/iip/getIipData`, `/api/nas/getNASData`. Needs OpenSSL legacy renegotiation, like RBI. The ministry publishes an MIT-licensed reference client (github.com/nso-india/esankhyiki-mcp) that documents every endpoint and parameter | **Ready to build.** This is the official source for the macro series FRED serves stale (its India CPI stops at March 2025). Exact parameter names per dataset are in that repo's `definitions/*.json` |
+| GST collections, PMI | Not in the MoSPI API (GST is CBIC, PMI is S&P Global, licensed) | Open |
 | Historical FII/DII | NSE only serves recent days publicly | Open. Could build our own history by saving the daily figure from the 7 PM run |
 | Telegram channels | Needs a user account and joined channels; no search API | Low priority; noisy and hard to attribute |
 | X/Twitter | 💰 $100+/month | Out of budget |
@@ -220,6 +221,24 @@ Google feed misses. Check that before adding one.
 ---
 
 ## Considered and rejected
+
+- **MCP-India-Stack** (github.com/rehan1020/MCP-India-Stack), reviewed
+  2026-09-22. 76+ tools for GSTIN/PAN/IFSC/UPI validation, income-tax and
+  GST calculators, EMI/PPF/SIP calculators, court and RTI helpers. It is built
+  for compliance and personal-finance workflows, not equity research: no
+  filings, shareholding, ownership or news. Its only market tools wrap
+  yfinance, which this project already calls directly, and its identity
+  validators check format and checksums only, not registration status.
+  Two further reasons it does not fit here:
+  - **The pipeline cannot consume MCP.** MCP servers expose tools to an
+    assistant (Claude Code, Claude Desktop). TradingAgents' analysts call
+    their own vendor layer (`interface.py`). Using such a server's data would
+    mean calling the underlying API directly anyway.
+  - **Tools cost requests.** Every tool round is one of the 500/day (§0), and
+    tool schemas cost tokens on every call. The direction here is the
+    opposite: pre-fetch data into the prompt.
+  It is a reasonable MCP server to attach to Claude Code for one-off GST or
+  IFSC lookups. That is a different job from this project.
 
 - **Several Google accounts or keys to get around the 500/day limit.** Against
   Google's terms and would risk the key. Use F5 (local model) or F2 (fewer
