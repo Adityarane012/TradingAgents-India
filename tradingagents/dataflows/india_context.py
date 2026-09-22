@@ -28,6 +28,7 @@ from __future__ import annotations
 from datetime import date
 
 from .config import get_config
+from .india_relative import commodity_fx_block, relative_strength_block
 from .nse_india import (
     announcements_block,
     corporate_actions_block,
@@ -88,7 +89,11 @@ def india_market_context(ticker: str, curr_date: str | date | None = None) -> st
         f"- Options positioning: {nifty_pcr_block(curr_date)}\n"
         "  (PCR above ~1 means more put than call open interest. It is read as a "
         "contrarian/hedging signal and its interpretation is debated — treat it as "
-        "one input, not a directional call.)\n\n"
+        "one input, not a directional call.)\n"
+        f"- Crude and rupee: {commodity_fx_block(curr_date)}\n"
+        "  (India imports most of its crude: dearer oil squeezes refiners, paints, "
+        "chemicals, airlines and autos and weakens the rupee; a weaker rupee lifts IT "
+        "and pharma exporters' earnings. Say whether either matters for this company.)\n\n"
         + announcements_block(
             ticker,
             curr_date,
@@ -116,6 +121,14 @@ def india_ownership_context(ticker: str, curr_date: str | date | None = None) ->
         # cross-checks its promoter figure against them.
         + ownership_split_block(ticker, curr_date, _nse_promoter_pct(ticker, curr_date))
     )
+
+
+def india_relative_context(ticker: str, curr_date: str | date | None = None) -> str:
+    """The stock's returns beside its sector index and the Nifty 50, for the
+    market analyst. Returns ``""`` when this ticker is not in scope."""
+    if not india_data_enabled(ticker):
+        return ""
+    return relative_strength_block(ticker, curr_date)
 
 
 def _nse_promoter_pct(ticker: str, curr_date: str | date | None) -> float | None:

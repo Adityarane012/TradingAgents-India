@@ -8,6 +8,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_verified_market_snapshot,
 )
 from tradingagents.dataflows.config import get_config
+from tradingagents.dataflows.india_context import india_relative_context
 from tradingagents.dataflows.symbol_utils import is_india_ticker
 
 # India VIX (^INDIAVIX on Yahoo) is NSE's own domestic fear gauge, computed
@@ -79,6 +80,10 @@ Before writing the final report, call get_verified_market_snapshot for this tick
 Write a very detailed and nuanced report of the trends you observe. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."""
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
             + (_INDIA_VIX_GUIDANCE if is_india_ticker(ticker) else "")
+            # Pre-computed like the NSE blocks the other analysts get: one
+            # price download instead of extra tool rounds per ticker. Empty
+            # for non-Indian tickers and with india_data_enabled=False.
+            + india_relative_context(ticker, current_date)
             + get_language_instruction()
         )
 
