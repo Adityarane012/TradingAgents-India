@@ -57,6 +57,12 @@ dev = [
 bedrock = [
     "langchain-aws>=1.5.0",
 ]
+# Local FinBERT headline scoring (local_sentiment="finbert"). Optional because
+# torch is large; everything works without it, headlines just go unscored.
+sentiment = [
+    "torch>=2.2",
+    "transformers>=4.40",
+]
 
 [project.scripts]
 tradingagents = "cli.main:app"
