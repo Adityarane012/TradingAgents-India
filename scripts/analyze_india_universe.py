@@ -159,7 +159,7 @@ def main() -> int:
                               "Avoids per-IP rate-limit backoffs on a multi-ticker run when "
                               "you don't have REDDIT_CLIENT_ID/SECRET configured.")
     parser.add_argument("--free", action="store_true",
-                         help="Zero-cost preset: Gemini's free tier (1,000 req/day, the only "
+                         help="Zero-cost preset: Gemini's free tier (500 req/day on this key's model, the only "
                               "one whose token budget clears a full run), keyless data vendors "
                               "only, and a reduced indicator budget to cut tokens per ticker. "
                               "Explicit --provider/--deep-model/--quick-model still win.")

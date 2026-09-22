@@ -274,7 +274,7 @@ TradingAgents works with any market Yahoo Finance covers, using the exchange-suf
 - China A-shares: Shanghai `.SS`, Shenzhen `.SZ` (e.g. `600519.SS` for Kweichow Moutai)
 - Crypto: `BTC-USD`, `ETH-USD`
 
-For `.NS`/`.BO` tickers, the sentiment analyst automatically routes to Indian subreddits and the news/market/fundamentals analysts get India-specific prompt guidance (India VIX, FRED's India macro series, currency/governance caveats) — no config needed. Optionally set `"data_vendors": {"news_data": "india_rss,yfinance"}` for Economic Times/Mint RSS macro news instead of Yahoo Finance search, which has thin Indian coverage.
+For `.NS`/`.BO` tickers, the sentiment analyst automatically routes to Indian subreddits and the news/market/fundamentals analysts get India-specific prompt guidance (India VIX, FRED's India macro series, currency/governance caveats), plus pre-computed blocks: the stock's 1/3/6-month return beside its sector and the Nifty 50 (market analyst) and Brent crude and USD/INR (news analyst) — no config needed. Optionally set `"data_vendors": {"news_data": "india_rss,yfinance"}` for Economic Times/Mint RSS macro news instead of Yahoo Finance search, which has thin Indian coverage.
 
 #### NSE market data for Indian tickers
 

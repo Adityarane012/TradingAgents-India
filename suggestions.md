@@ -4,48 +4,48 @@
 
 ---
 
-## Implementation status (2026-09-17)
+## Status — every section rechecked against the code on 2026-09-22
 
-Most of the actionable items below were implemented on
-`fix/stocktwits-symbol-exchange-suffix` (local, not pushed) — see `issues.md`
-for the item-by-item status, since I-001 through I-010 there map to specific
-sections here. Summary of what changed after live-testing this document's
-claims:
+✅ done · ⚠️ done differently (the suggestion was wrong or unsafe) · ❌ not done,
+with the reason. Items marked ❌ that are worth doing later are in
+`future_plans.md`. The body below this table is the original guide. Symbols and
+series in it that turned out to be dead are marked inline, so none is copied by
+mistake.
 
-- **§4.2/4.3 (StockTwits, Reddit subreddits):** both suggested fixes were
-  tested live and corrected — see issues.md I-001/I-003. The 1-line
-  DEFAULT_SUBREDDITS swap this doc suggests would have made US-ticker
-  sentiment worse; implemented as region-routing instead.
-- **§3.1 (FRED aliases), §6 (agent prompts), §7.2 (India news RSS), §9
-  (India VIX):** implemented, with corrections noted in issues.md.
-- **§2.2/2.3/2.4 (FRED disable, benchmark_ticker, output_language):** these
-  already worked — verified the env vars and config keys exist and do what
-  this doc says. No code change needed, they're just not obvious from the
-  README (now they're mentioned there).
-- **§3.3 (NSE India API) and §3.4 (RBI DBIE):** ⚠️ the 2026-09-17 note here
-  said both were unreachable. **That was wrong, and both are now built** — see
-  the Correction section in `issues.md`. In short: only nseindia.com's
-  *homepage* 403s, its JSON API answers fine with a browser User-Agent, so
-  §3.3's FII/DII, India VIX and PCR are live in `nse_india.py`; and while
-  `dbie.rbi.org.in` does have a broken certificate, rbi.org.in's homepage
-  carries a parseable rates box, so §3.4's repo/CRR/SLR are live in
-  `rbi_rates.py`. The code sketch in §3.3 is still not a working example — it
-  uses the retired `option-chain-indices` endpoint (now 404) and a session
-  cookie handshake that turns out to be unnecessary.
-- **§7.2 (RSS feeds):** of the four feeds listed, only Economic Times and
-  Mint actually serve RSS. Business Standard's markets feed returns HTTP
-  403; the Financial Express URL serves an HTML page, not RSS. Implemented
-  with just the two that work (`tradingagents/dataflows/india_news.py`).
-- **§4.4 (X/Twitter), §7.3/§7.4 (NSE corporate actions, SEBI filings):** not
-  built — paid API or the same NSE/scraping reliability problem as §3.3.
-- **Numbers not independently verified and possibly stale:** the "Nifty-VIX
-  correlation ~0.7", "<10 StockTwits posts for Indian stocks", and
-  "800K+ members" membership figures in this doc are asserted without a
-  source; treat them as unverified color, not facts to cite.
-- **NSE F&O expiry day:** this doc says "Every Thursday" in a couple of
-  places (§5.2, §6.4). NSE has changed its weekly expiry day more than once
-  in recent years — the market-analyst prompt guidance shipped here
-  deliberately does NOT name a specific weekday for this reason.
+| § | Suggestion | Status | Where / why |
+|---|---|---|---|
+| 1 | Indian tickers work out of the box | ✅ | Verified. The quick-reference list now uses `TMCV.NS`; `TATAMOTORS.NS` 404s since the demerger. |
+| 2.1 | India-first news queries | ✅ | Automatic for `.NS`/`.BO`: `REGIONAL_NEWS_QUERIES` (issues.md I-005). |
+| 2.2 | Disable / repurpose FRED | ✅ | Already worked; kept on. Its India series are used with staleness warnings. |
+| 2.3 | Benchmark `^NSEI` | ✅ | Automatic from the ticker suffix (`default_config.py`). |
+| 2.4 | Output language | ✅ | `TRADINGAGENTS_OUTPUT_LANGUAGE` works as described. |
+| 3.1 | FRED India aliases | ⚠️ | Added, except `INTDSRINM193N` ("RBI lending rate"), which died in July 2022. Live RBI rates are scraped from rbi.org.in instead (`rbi_rates.py`). |
+| 3.2 | Global series + crude oil | ✅ | The FRED aliases existed. **Crude added 2026-09-22**: Brent and USD/INR go to the news analyst (`india_relative.commodity_fx_block`). |
+| 3.3 | NSE India API | ✅ | `nse_india.py`: FII/DII, India VIX, Nifty level, PCR, shareholding, corporate actions and announcements. The sketch in §3.3 is wrong: its endpoint 404s and its cookie handshake is unneeded. |
+| 3.4 | RBI DBIE | ⚠️ | DBIE's certificate is broken; repo/SDF/MSF/CRR/SLR come from the rbi.org.in homepage. **Not done:** WPI, forex reserves, external debt (see future_plans.md). |
+| 4.1 | Indian retail platforms | ⚠️ | Reddit India subs ✅, StockTwits ✅. X ❌ (paid, $100+/mo). Telegram ❌ (needs a bot and joined channels; no search API). Moneycontrol forums ❌ (scraping only, no API). |
+| 4.2 | Indian subreddits | ⚠️ | Region-routed, not the one-line swap, which would have degraded US tickers. r/DalalStreet was dropped: no posts since Jan 2024. |
+| 4.3 | StockTwits suffix | ⚠️ | A verified ADR allowlist. Stripping the suffix mapped TCS→Container Store and ITC→a US utility. |
+| 4.4 | X/Twitter | ❌ | Paid API, and this is a zero-budget project. |
+| 5.1 | Trading hours | ❌ by design | Static facts the model already knows; this pipeline works on daily bars, so session times never change an answer. Adding them costs tokens on every call. |
+| 5.2 | India calendar events | ⚠️ | The prompts name RBI MPC, Budget, F&O expiry and FII/DII as things to watch. **Real event dates are not fetched** (see future_plans.md). The expiry weekday is deliberately not named, because NSE has changed it. |
+| 5.3 | SEBI circuit rules, T+1 | ❌ by design | Same reason as 5.1. The limits also vary by stock band, so a hardcoded table would mislead. |
+| 5.4 | Sector index comparison | ✅ **added 2026-09-22** | `india_relative.relative_strength_block`, for the market analyst. Only Nifty Bank, IT and Pharma have price history on Yahoo; the other sector indices return one bar. So most sectors use an equal-weighted basket of Nifty 50 peers. |
+| 6.1 | News analyst India macro | ✅ | Uses the corrected aliases; steers to live RBI rates. |
+| 6.2 | Fundamentals INR context | ⚠️ | Live currency facts for every non-USD ticker, plus the INFY INR/USD mismatch warning. The "~22x" and "83–86 INR/USD" figures were not hardcoded: they go stale (USD/INR is ~95.8 today). Promoter holding comes from NSE filings. **Pledging is still unavailable**: NSE's endpoint returns empty and screener's public page has no pledge data (checked 2026-09-21). Related-party, PSU and PLI notes ❌: generic advice the model already applies. |
+| 6.3 | Sentiment India context | ✅ | `sentiment_analyst.py` routes to and describes the India subreddits. |
+| 6.4 | Market analyst India context | ⚠️ | India VIX ✅. Expiry volatility ✅ (weekday not named). "Round-number levels" ❌: unfalsifiable folklore. |
+| 7.1 | NSE module | ✅ | See 3.3. |
+| 7.2 | India news RSS | ⚠️ | Economic Times + Mint (`india_news.py`). Business Standard 403s; Financial Express serves HTML. **Google News India RSS tested 2026-09-22**: 46–100 items per stock per week, from 30–70 sources. It is the top item in future_plans.md. |
+| 7.3 | NSE corporate announcements | ✅ | Plus triage: routine filings are summarised, material ones quoted. |
+| 7.4 | SEBI filings scraper | ❌ | Superseded: NSE shareholding and announcements cover the promoter and acquisition cases. Pledging is the gap (see 6.2). |
+| 7.5 | India VIX | ✅ | See 6.4. |
+| 8 | Known gaps table | — | Updated in place below: each row now states its status. |
+| 9 | Quick reference | ✅ fixed | Dead symbols corrected: `TATAMOTORS.NS`→`TMCV.NS`, `^CNXMIDCAP`→`NIFTY_MIDCAP_100.NS`, `^CNXSMALLCAP`→`^CNXSC`. `INTDSRINM193N` is marked dead. |
+
+**Unverified numbers in the original text.** The "Nifty-VIX correlation ~0.7",
+"<10 StockTwits posts" and "800K+ members" figures have no source. Treat them
+as colour, not facts to cite.
 
 ---
 
@@ -175,7 +175,7 @@ These are valid raw FRED series IDs — pass them directly to the existing `get_
 | Series ID | Description | Relevance |
 |---|---|---|
 | `INDCPIALLMINMEI` | India CPI All Items (monthly) | RBI reaction function |
-| `INTDSRINM193N` | India RBI Lending Rate | Direct policy rate |
+| ~~`INTDSRINM193N`~~ | ~~India RBI Lending Rate~~ | **Dead since July 2022 — use `rbi_rates.py`** |
 | `INDIRLTLT01STM` | India 10Y Government Bond Yield | EM bond market |
 | `DEXINUS` | USD/INR exchange rate (daily) | INR strength |
 | `INDGDPRPCPPPT` | India GDP per capita (PPP) | Structural growth |
@@ -338,12 +338,15 @@ The X API v2 Basic tier ($100/month) supports cashtag search. Build `tradingagen
 
 ### 5.4 NSE Sector Indices for Peer Comparison
 
+> **Checked 2026-09-22:** only ^NSEBANK, ^CNXIT and ^CNXPHARMA have price *history* on Yahoo;
+> the rest return today's quote only. Implemented with peer baskets instead (`india_relative.py`).
+
 | NSE Sector Index | Key Stocks | Yahoo Symbol |
 |---|---|---|
 | Nifty Bank | HDFCBANK, ICICIBANK, KOTAKBANK | ^NSEBANK |
 | Nifty IT | TCS, INFY, WIPRO, HCL | ^CNXIT |
 | Nifty Pharma | SUNPHARMA, DRREDDY, CIPLA | ^CNXPHARMA |
-| Nifty Auto | MARUTI, TATAMOTORS, BAJAJ-AUTO | ^CNXAUTO |
+| Nifty Auto | MARUTI, TMCV (ex-TATAMOTORS), BAJAJ-AUTO | ^CNXAUTO |
 | Nifty FMCG | HINDUNILVR, ITC, NESTLEIND | ^CNXFMCG |
 | Nifty Metal | TATASTEEL, JSWSTEEL, HINDALCO | ^CNXMETAL |
 | Nifty Energy | RELIANCE, ONGC, POWERGRID | ^CNXENERGY |
@@ -365,7 +368,7 @@ if is_india:
     macro_guidance = (
         "For India macro context, call get_macro_indicators with: "
         "'INDCPIALLMINMEI' (India CPI), 'DEXINUS' (USD/INR rate), "
-        "'INTDSRINM193N' (RBI lending rate), 'fed_funds_rate' (US Fed — "
+        "'fed_funds_rate' (US Fed — "  # INTDSRINM193N removed: dead since 2022
         "affects FII flows into India), 'vix' (global risk-off proxy), "
         "'dollar_index' (DXY strength impacts INR and FII inflows into India). "
         "Key India catalysts: RBI MPC decisions, Union Budget announcements, "
@@ -514,20 +517,20 @@ india_vix_data = get_YFin_data_online("^INDIAVIX", start_date, end_date)
 
 ## 8. Known Gaps and Honest Limitations
 
-| Gap | Severity | Workaround Available |
+| Gap | Status | Where / workaround |
 |---|---|---|
-| No RBI repo rate as a friendly FRED alias | High | Use raw series ID INTDSRINM193N directly |
-| Reddit India subreddits not in defaults | High | 1-line fix in reddit.py (see Section 4.2) |
-| StockTwits has thin India coverage | Medium | Fix suffix stripping; weight confidence low |
-| No FII/DII flow data | High | Requires new NSE India module |
-| No India VIX integration | Medium | Fetch ^INDIAVIX via existing yfinance tool |
-| No Moneycontrol or ET dedicated news vendor | Medium | yfinance news has decent India coverage |
-| No India F&O/derivative awareness in prompts | Medium | Update agent prompts (see Section 6) |
-| FRED still fetches US macro by default | Low | Still useful: DXY/VIX/Fed impacts FII flows |
-| No GST/IIP/PMI data integration | Medium | Not available via any free structured API |
-| Promoter pledging data unavailable | High | Requires BSEIndia or SEBI scraping |
-| Historical FII/DII data limited | High | NSE only provides recent data publicly |
-| No monsoon/agricultural data integration | Low | Include in news queries for FMCG/agri stocks |
+| No RBI repo rate as a friendly FRED alias | ✅ Resolved | Live from rbi.org.in (`rbi_rates.py`); INTDSRINM193N is dead |
+| Reddit India subreddits not in defaults | ✅ Resolved | Region-routed (reddit.py) |
+| StockTwits has thin India coverage | ✅ Mitigated | Verified ADR allowlist; thin by nature |
+| No FII/DII flow data | ✅ Resolved | nse_india.py |
+| No India VIX integration | ✅ Resolved | Market analyst guidance + NSE level |
+| No Moneycontrol or ET dedicated news vendor | ⚠️ Partly | ET + Mint RSS built; Google News India is next (future_plans.md) |
+| No India F&O/derivative awareness in prompts | ✅ Resolved | Expiry guidance + live Nifty PCR |
+| FRED still fetches US macro by default | ✅ By design | DXY/VIX/Fed drive FII flows |
+| No GST/IIP/PMI data integration | ❌ Open | No free structured API; see future_plans.md |
+| Promoter pledging data unavailable | ❌ Open | NSE endpoint empty, screener has none; see future_plans.md |
+| Historical FII/DII data limited | ❌ Open | Still true; historical runs get a sentinel |
+| No monsoon/agricultural data integration | ❌ Open (low) | IMD has no clean API; news covers it |
 
 ---
 
@@ -550,7 +553,7 @@ WIPRO.NS         Wipro
 AXISBANK.NS      Axis Bank
 MARUTI.NS        Maruti Suzuki
 SUNPHARMA.NS     Sun Pharmaceutical
-TATAMOTORS.NS    Tata Motors
+TMCV.NS          Tata Motors (TATAMOTORS.NS is dead since the demerger)
 ONGC.NS          Oil and Natural Gas Corporation
 NTPC.NS          NTPC Limited
 POWERGRID.NS     Power Grid Corporation
@@ -575,8 +578,8 @@ CIPLA.NS         Cipla
 ^CNXFMCG         Nifty FMCG
 ^CNXMETAL        Nifty Metal
 ^CNXENERGY       Nifty Energy
-^CNXMIDCAP       Nifty Midcap 100
-^CNXSMALLCAP     Nifty Smallcap 100
+NIFTY_MIDCAP_100.NS  Nifty Midcap 100 (^CNXMIDCAP returns no data)
+^CNXSC           Nifty Smallcap 100 (^CNXSMALLCAP returns no data)
 ^INDIAVIX        India VIX
 USDINR=X         USD/INR spot rate
 ```
@@ -586,7 +589,7 @@ USDINR=X         USD/INR spot rate
 ```
 INDCPIALLMINMEI    India CPI (monthly)
 DEXINUS            USD/INR daily exchange rate
-INTDSRINM193N      India RBI lending rate
+INTDSRINM193N      DEAD since July 2022 - do not use (live rates: rbi_rates.py)
 INDIRLTLT01STM     India 10Y government bond yield
 INDGDPRPCPPPT      India GDP per capita (PPP)
 FEDFUNDS           US Fed Funds Rate (affects FII flows into India)
@@ -598,20 +601,20 @@ VIXCLS             CBOE VIX (global risk-off proxy)
 
 ## Prioritized Action Summary
 
-| # | Action | File to Change | Effort | Impact |
-|---|---|---|---|---|
-| 1 | Set global_news_queries to India-first | default_config.py or runtime config | 5 min | High |
-| 2 | Add FRED India aliases to MACRO_SERIES | tradingagents/dataflows/fred.py | 30 min | High |
-| 3 | Change DEFAULT_SUBREDDITS to India subs | tradingagents/dataflows/reddit.py | 2 min | High |
-| 4 | Fix StockTwits .NS/.BO suffix stripping | tradingagents/dataflows/stocktwits.py | 15 min | Medium |
-| 5 | Set benchmark_ticker to ^NSEI | .env or runtime config | 1 min | Medium |
-| 6 | Update news analyst prompt for India macros | tradingagents/agents/analysts/news_analyst.py | 30 min | High |
-| 7 | Update fundamentals analyst for INR context | tradingagents/agents/analysts/fundamentals_analyst.py | 20 min | Medium |
-| 8 | Update sentiment analyst for India platforms | tradingagents/agents/analysts/sentiment_analyst.py | 20 min | Medium |
-| 9 | Build nse_india.py for FII/DII and PCR data | tradingagents/dataflows/nse_india.py (new) | 3-4 hours | Very High |
-| 10 | Add Indian financial news RSS vendor | tradingagents/dataflows/india_news.py (new) | 3-5 hours | High |
-| 11 | Add India VIX to market analyst tools | tradingagents/agents/analysts/market_analyst.py | 30 min | Medium |
-| 12 | Build NSE corporate announcements fetcher | tradingagents/dataflows/nse_india.py (extend) | 2-3 hours | High |
+| # | Action | File to Change | Effort | Impact | Status |
+|---|---|---|---|---|---|
+| 1 | Set global_news_queries to India-first | default_config.py or runtime config | 5 min | High | ✅ auto |
+| 2 | Add FRED India aliases to MACRO_SERIES | tradingagents/dataflows/fred.py | 30 min | High | ⚠️ done, minus dead series |
+| 3 | Change DEFAULT_SUBREDDITS to India subs | tradingagents/dataflows/reddit.py | 2 min | High | ⚠️ region-routed |
+| 4 | Fix StockTwits .NS/.BO suffix stripping | tradingagents/dataflows/stocktwits.py | 15 min | Medium | ⚠️ ADR allowlist |
+| 5 | Set benchmark_ticker to ^NSEI | .env or runtime config | 1 min | Medium | ✅ auto |
+| 6 | Update news analyst prompt for India macros | tradingagents/agents/analysts/news_analyst.py | 30 min | High | ✅ |
+| 7 | Update fundamentals analyst for INR context | tradingagents/agents/analysts/fundamentals_analyst.py | 20 min | Medium | ⚠️ no hardcoded ratios |
+| 8 | Update sentiment analyst for India platforms | tradingagents/agents/analysts/sentiment_analyst.py | 20 min | Medium | ✅ |
+| 9 | Build nse_india.py for FII/DII and PCR data | tradingagents/dataflows/nse_india.py (new) | 3-4 hours | Very High | ✅ |
+| 10 | Add Indian financial news RSS vendor | tradingagents/dataflows/india_news.py (new) | 3-5 hours | High | ⚠️ ET+Mint |
+| 11 | Add India VIX to market analyst tools | tradingagents/agents/analysts/market_analyst.py | 30 min | Medium | ✅ |
+| 12 | Build NSE corporate announcements fetcher | tradingagents/dataflows/nse_india.py (extend) | 2-3 hours | High | ✅ |
 
 ---
 

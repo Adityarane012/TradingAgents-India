@@ -8,13 +8,33 @@
 
 ---
 
-## Implementation status (2026-09-17)
+## Status — rechecked against the code on 2026-09-22
 
-All nine issues below were implemented on `fix/stocktwits-symbol-exchange-suffix`
-(local branch, not pushed — see git log). **Several of the suggested fixes
-below were wrong and were corrected during implementation after live testing
-against the real APIs** — read the notes before reusing this file's code
-snippets verbatim.
+**All nine issues are resolved and live on `main` of TradingAgents-India.**
+Each row below was re-verified in the current source, not copied from the
+earlier note. The branch named in the 2026-09-17 note was merged and deleted.
+Nothing in this file is still open. What remains undone from the wider India
+work, and why, is tracked in `suggestions.md` (status table) and
+`future_plans.md`.
+
+Where each fix now lives:
+
+- I-001: `_INDIA_ADR_ALIASES` in `stocktwits.py`.
+- I-002: commit 3464ac6; no later commit removed it.
+- I-003: `INDIA_SUBREDDITS` in `reddit.py`.
+- I-004: `financialCurrency` in `agent_utils.py`, plus the INFY currency-mismatch
+  warning.
+- I-005: `REGIONAL_NEWS_QUERIES` in `default_config.py`, applied in
+  `trading_graph.py`.
+- I-006: India aliases in `fred.py`; `rbi_lending_rate` now returns an
+  explanation instead of a dead series.
+- I-008: "Optional data vendors" in README.
+- I-009: `_INDIA_VIX_GUIDANCE` in `market_analyst.py`.
+- I-010: the India block in `news_analyst.py`.
+
+**Several of the suggested fixes below were wrong and were corrected during
+implementation after live testing against the real APIs.** Read the notes
+before reusing this file's code snippets verbatim.
 
 | # | Status | Note |
 |---|---|---|
