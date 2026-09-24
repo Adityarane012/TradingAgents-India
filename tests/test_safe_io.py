@@ -14,7 +14,7 @@ import subprocess
 import sys
 import textwrap
 import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -192,3 +192,29 @@ class TestWindow:
         now = datetime(2026, 9, 21, 19, 3, 12)
         assert refresh.window_end("20:00", now) == datetime(2026, 9, 21, 20, 0)
         assert refresh.window_end(None, now) is None
+
+
+class TestSessionFinality:
+    """A run must never treat a live intraday quote as the day's close.
+
+    On 2026-09-24 the scheduler ran the missed evening job at 09:26, eleven
+    minutes after the open. yfinance already had a bar dated that day, so the
+    old check ("is the newest bar today's?") passed and the batch began
+    analysing a session that had barely started.
+    """
+
+    @pytest.mark.parametrize("bar, now, final", [
+        # today's bar, before the close -> a live quote, not a close
+        (date(2026, 9, 24), datetime(2026, 9, 24, 9, 26), False),
+        (date(2026, 9, 24), datetime(2026, 9, 24, 15, 29), False),
+        # just after the close, before the settle window is up
+        (date(2026, 9, 24), datetime(2026, 9, 24, 15, 40), False),
+        # settled, and the usual evening slot
+        (date(2026, 9, 24), datetime(2026, 9, 24, 15, 45), True),
+        (date(2026, 9, 24), datetime(2026, 9, 24, 19, 0), True),
+        # a bar from an earlier session is finished whatever the time
+        (date(2026, 9, 23), datetime(2026, 9, 24, 9, 26), True),
+    ])
+    def test_only_a_closed_session_counts(self, bar, now, final):
+        refresh = _script("daily_refresh")
+        assert refresh.session_is_final(bar, date(2026, 9, 24), now) is final

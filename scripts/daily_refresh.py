@@ -83,6 +83,12 @@ _LOG = None  # the --log file handle, once opened
 
 # Left free at the end of the --until window for the summary and dashboard.
 WRAP_UP = timedelta(minutes=3)
+# NSE's close, and how long to let the day's bar settle before trusting it as a
+# close. Without this a catch-up run started after 09:15 sees a bar dated today
+# and analyses an intraday quote as if it were the close — which happened on
+# 2026-09-24, when Task Scheduler ran the missed evening job at 09:26.
+MARKET_CLOSE = datetime.min.replace(hour=15, minute=30)
+SETTLE = timedelta(minutes=15)
 # The scan itself needs a few minutes; later than this, a run does nothing.
 MIN_USEFUL = timedelta(minutes=10)
 
@@ -138,6 +144,16 @@ def _download_closes(tickers: list[str], attempts: int = 3, wait_s: float = 60.0
         if attempt < attempts:
             time.sleep(wait_s)
     return None
+
+
+def session_is_final(latest_bar: date, today: date, now: datetime) -> bool:
+    """Whether the newest bar is a finished session rather than a live quote.
+
+    A bar dated before today is over by definition. Today's bar only counts
+    once the market has closed and the day's figure has settled."""
+    if latest_bar != today:
+        return True
+    return now >= datetime.combine(today, MARKET_CLOSE.time()) + SETTLE
 
 
 def window_end(until: str | None, now: datetime) -> datetime | None:
@@ -238,6 +254,11 @@ def _refresh(args) -> int:
     if latest_bar != today and not args.force:
         print(f"  latest trading session is {latest_bar}, not today — market closed or "
               f"data not published yet. Nothing to do (use --force to override).")
+        return 0
+    if not session_is_final(latest_bar, today, datetime.now()) and not args.force:
+        print(f"  today's session is still open (NSE closes {MARKET_CLOSE:%H:%M}); the latest "
+              f"price is an intraday quote, not a close. Nothing done — the evening run will "
+              f"analyse the finished session (use --force to override).")
         return 0
 
     last = load_last_reports(RUNS_CSV)
