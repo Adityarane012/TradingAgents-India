@@ -200,11 +200,15 @@ Google feed misses. Check that before adding one.
 
 ## Tier 5 — smoothing the daily process
 
-- **The 7 PM run needs the laptop awake and logged in.** On 2026-09-22 the
-  task fired at 21:28 instead of 19:00 (the machine was unavailable at 19:00)
-  and correctly did nothing, because the window had passed. If that repeats,
-  re-register with `-Wake`, or widen the window, or accept that a missed
-  evening is caught up the next day.
+- **The 7 PM run needs the laptop awake and logged in — it has not fired yet.**
+  22-Sep it started at 21:28 (too late, refused); 23-Sep it did not run at all
+  and Windows started it at 09:26 on the 24th, mid-session. Both cases are now
+  handled in code: a run never analyses an open session, and `--catch-up`
+  (in the task since 2026-09-24) analyses the last closed session instead.
+  Still worth deciding: re-register with `-Wake` so the evening slot actually
+  fires, or move the window to when the machine is reliably on. A catch-up run
+  is a day late and gets no live RBI/PCR/screener figures, since those refuse
+  past dates.
 - **Weekend catch-up run.** Saturday has the full quota and no competing manual
   runs. It could clear anything deferred during the week.
 - **Quota guard.** Before a manual batch on a weekday, warn if it would eat into
