@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Annotated
 
 import pandas as pd
@@ -10,6 +11,7 @@ from yfinance.exceptions import YFRateLimitError
 
 from .config import get_config
 from .errors import VendorRateLimitError
+from .safe_io import atomic_write_text
 from .symbol_utils import NoMarketDataError, normalize_symbol
 from .utils import safe_ticker_component, vendor_reachable
 
@@ -306,7 +308,14 @@ def load_ohlcv(symbol: str, curr_date: str, fill_gaps: bool = True) -> pd.DataFr
         # Only cache real data — never persist an empty frame.
         if downloaded.empty or "Close" not in downloaded.columns:
             raise_for_empty(symbol, canonical, "price rows")
-        downloaded.to_csv(data_file, index=False, encoding="utf-8")
+        # Written through a temporary file: a plain to_csv here leaves a
+        # half-written cache if the process is killed mid-write, or if two runs
+        # fetch the same symbol at once. That is not hypothetical — it damaged
+        # one cache on 2026-09-20 (see _cache_is_damaged) and cost M&M.NS its
+        # analysis on 2026-09-24, when the vendor failed with a date it could
+        # not parse out of a truncated row. os.replace is atomic, so a reader
+        # sees the old complete file or the new one, never a partial one.
+        atomic_write_text(Path(data_file), downloaded.to_csv(index=False))
         data = downloaded
 
     data = _clean_dataframe(data)

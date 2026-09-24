@@ -6,6 +6,8 @@ instead of `Date`, which would otherwise silently drop every indicator.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -156,3 +158,40 @@ class TestDamagedCacheSelfHeals:
 
     def test_a_missing_file_is_treated_as_damaged(self, tmp_path):
         assert su._cache_is_damaged(str(tmp_path / "nope.csv"), pd.DataFrame()) is True
+
+
+class TestCacheWriteIsAtomic:
+    """A killed or concurrent write must never leave a half-written cache.
+
+    The self-heal above cleans up after damage; this stops the damage. On
+    2026-09-24 a run was killed mid-flight and M&M.NS's next analysis failed
+    with "unconverted data remains: ," — a date read out of a truncated row.
+    """
+
+    def test_a_crash_during_the_write_leaves_the_previous_cache_intact(self, tmp_path,
+                                                                       monkeypatch):
+        cache = tmp_path / "X.NS-YFin-data.csv"
+        good = "Date,Close\n2026-01-02,10\n"
+        cache.write_text(good, encoding="utf-8")
+
+        def die(*a, **k):
+            raise OSError("process killed mid-write")
+
+        monkeypatch.setattr(su.atomic_write_text.__globals__["os"], "replace", die)
+        with pytest.raises(OSError):
+            su.atomic_write_text(cache, "Date,Close\n2026-01-02,10\n2026-01-05,11\n")
+
+        assert cache.read_text(encoding="utf-8") == good
+        assert [p.name for p in tmp_path.iterdir()] == [cache.name]  # no temp left
+
+    def test_a_completed_write_replaces_the_file_whole(self, tmp_path):
+        cache = tmp_path / "X.NS-YFin-data.csv"
+        cache.write_text("Date,Close\n2026-01-02,10\n", encoding="utf-8")
+        su.atomic_write_text(cache, "Date,Close\n2026-01-06,12\n")
+        assert cache.read_text(encoding="utf-8") == "Date,Close\n2026-01-06,12\n"
+
+    def test_the_loader_writes_its_cache_atomically(self):
+        """Guard against a future edit going back to a plain to_csv."""
+        source = Path(su.__file__).read_text(encoding="utf-8")
+        assert "atomic_write_text(Path(data_file)" in source
+        assert "downloaded.to_csv(data_file" not in source
