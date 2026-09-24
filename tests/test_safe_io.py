@@ -274,3 +274,35 @@ class TestSessionChoice:
     def test_no_price_data_is_refused(self):
         target, why = self._pick(self.EVENING, sessions=[])
         assert target is None and "no trading sessions" in why
+
+
+class TestConcurrentWrites:
+    """Two threads writing the same file must both succeed.
+
+    The temp name used to be per-process, so parallel writes to one price
+    cache shared it: the first replace left the second with nothing to rename
+    (FileNotFoundError on HDFCLIFE's cache, 2026-09-24).
+    """
+
+    def test_parallel_writers_do_not_steal_each_others_temp_file(self, tmp_path):
+        import threading
+
+        target = tmp_path / "cache.csv"
+        errors: list[BaseException] = []
+
+        def write(text):
+            try:
+                for _ in range(15):
+                    atomic_write_text(target, text)
+            except BaseException as exc:  # noqa: BLE001 — recorded for the assert
+                errors.append(exc)
+
+        threads = [threading.Thread(target=write, args=(f"payload {i}\n",)) for i in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == []
+        assert target.read_text(encoding="utf-8").startswith("payload ")
+        assert [p.name for p in tmp_path.iterdir()] == ["cache.csv"]  # no temps left

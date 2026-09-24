@@ -26,6 +26,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 # Set in the environment of a child process whose parent already holds the
 # lock, so the batch runner started by the refresh does not lock itself out.
@@ -52,7 +53,11 @@ def _replace(src: Path, dst: Path, attempts: int = 5) -> None:
 def atomic_write_text(path: Path, text: str, encoding: str = "utf-8") -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    # Unique per call, not per process: two threads writing the same path
+    # would otherwise share a temp name, and the first one's os.replace would
+    # leave the second with nothing to rename (FileNotFoundError, seen on the
+    # price cache on 2026-09-24).
+    temp = path.with_name(f".{path.name}.{os.getpid()}.{uuid4().hex[:8]}.tmp")
     try:
         with temp.open("w", encoding=encoding, newline="") as handle:
             handle.write(text)

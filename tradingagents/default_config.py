@@ -128,12 +128,15 @@ FREE_TIER_CONFIG = {
     # before Gemini sees them. Degrades to unscored headlines if torch or the
     # model is missing, so it is safe to leave on.
     "local_sentiment": "finbert",
-    # gemini-3.1-flash-lite answered 503 "high demand" for a whole evening
-    # on 2026-09-24. Checked that day through this client: gemini-3.6-flash
-    # served normally, and gemini-2.5-flash is retired ("no longer available
-    # to new users"). Flash-lite keeps the larger free quota, so it stays the
-    # primary and 3.6-flash is the understudy.
-    "llm_fallback_models": ["gemini-3.6-flash"],
+    # gemini-3.1-flash-lite answered 503 "high demand" for a whole evening on
+    # 2026-09-24. Understudies checked that day through this client, since a
+    # model that answers a bare probe can still be wrong here:
+    #   gemini-3.5-flash-lite  served normally — first understudy
+    #   gemini-3.6-flash       served normally but its free tier is 20 requests
+    #                          a day (about one ticker), so it is the last resort
+    #   gemini-2.5-flash       retired: "no longer available to new users"
+    #   gemini-3.1-flash, gemini-3.6-flash-lite, gemini-2.0-flash  404
+    "llm_fallback_models": ["gemini-3.5-flash-lite", "gemini-3.6-flash"],
 }
 
 
