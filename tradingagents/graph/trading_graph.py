@@ -37,6 +37,7 @@ from tradingagents.default_config import (
     SUFFIX_TO_REGION,
 )
 from tradingagents.llm_clients import create_llm_client
+from tradingagents.llm_clients.fallback import with_model_fallbacks
 from tradingagents.reporting import write_report_tree
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
@@ -165,8 +166,23 @@ class TradingAgentsGraph:
             **llm_kwargs,
         )
 
-        self.deep_thinking_llm = deep_client.get_llm()
-        self.quick_thinking_llm = quick_client.get_llm()
+        # A free-tier model can answer every call with 503 "high demand" for
+        # an hour while another model serves normally, which cost the whole
+        # 19:00 batch on 2026-09-24. Understudies are tried only for that kind
+        # of failure; quota and auth errors still stop the run.
+        def _build(model_name: str):
+            return create_llm_client(
+                provider=self.config["llm_provider"],
+                model=model_name,
+                base_url=self.config.get("backend_url"),
+                **llm_kwargs,
+            ).get_llm()
+
+        fallbacks = list(self.config.get("llm_fallback_models") or [])
+        self.deep_thinking_llm = with_model_fallbacks(
+            deep_client.get_llm(), _build, fallbacks, self.config["deep_think_llm"])
+        self.quick_thinking_llm = with_model_fallbacks(
+            quick_client.get_llm(), _build, fallbacks, self.config["quick_think_llm"])
 
         self.memory_log = TradingMemoryLog(self.config)
 

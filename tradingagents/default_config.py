@@ -128,6 +128,12 @@ FREE_TIER_CONFIG = {
     # before Gemini sees them. Degrades to unscored headlines if torch or the
     # model is missing, so it is safe to leave on.
     "local_sentiment": "finbert",
+    # gemini-3.1-flash-lite answered 503 "high demand" for a whole evening
+    # on 2026-09-24. Checked that day through this client: gemini-3.6-flash
+    # served normally, and gemini-2.5-flash is retired ("no longer available
+    # to new users"). Flash-lite keeps the larger free quota, so it stays the
+    # primary and 3.6-flash is the understudy.
+    "llm_fallback_models": ["gemini-3.6-flash"],
 }
 
 
@@ -232,6 +238,10 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # "finbert" (needs `pip install "tradingagents[sentiment]"`; ~440 MB model,
     # downloaded once). See tradingagents/dataflows/finbert_sentiment.py.
     "local_sentiment": None,
+    # Models to try when the configured one answers with a transient
+    # provider failure (503 "high demand", 502/504, timeouts). Quota and
+    # auth failures are never retried elsewhere. Empty = no fallback.
+    "llm_fallback_models": [],
     "global_news_article_limit": 10,      # max articles for global/macro news
     "global_news_lookback_days": 7,       # macro news lookback window
     # Reddit is fetched anonymously by default and shares a strict per-IP rate
