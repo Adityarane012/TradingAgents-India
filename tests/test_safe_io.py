@@ -218,3 +218,59 @@ class TestSessionFinality:
     def test_only_a_closed_session_counts(self, bar, now, final):
         refresh = _script("daily_refresh")
         assert refresh.session_is_final(bar, date(2026, 9, 24), now) is final
+
+
+class TestSessionChoice:
+    """Which session a run analyses.
+
+    Both scheduled evenings so far (22 and 23 Sep 2026) were missed because
+    the laptop was off at 19:00, and Windows ran the job the next morning.
+    Doing nothing wastes the day; analysing the open session is wrong. So a
+    catch-up run takes the last finished session, unless it is already done.
+    """
+
+    SESSIONS = [date(2026, 9, 21), date(2026, 9, 23), date(2026, 9, 24)]
+    TODAY = date(2026, 9, 24)
+    EVENING = datetime(2026, 9, 24, 19, 0)
+    MORNING = datetime(2026, 9, 24, 9, 26)
+
+    def _pick(self, now, catch_up=False, analysed=(), sessions=None, today=None, force=False):
+        refresh = _script("daily_refresh")
+        return refresh.pick_session(sessions if sessions is not None else self.SESSIONS,
+                                    today or self.TODAY, now, catch_up=catch_up,
+                                    analysed=set(analysed), force=force)
+
+    def test_evening_run_takes_todays_finished_session(self):
+        assert self._pick(self.EVENING)[0] == date(2026, 9, 24)
+
+    def test_morning_run_without_catch_up_does_nothing(self):
+        target, why = self._pick(self.MORNING)
+        assert target is None and "still open" in why
+
+    def test_morning_catch_up_takes_the_last_finished_session(self):
+        target, why = self._pick(self.MORNING, catch_up=True)
+        assert target == date(2026, 9, 23)
+        assert "Catching up" in why and "live-only sources" in why
+
+    def test_catch_up_skips_a_session_already_analysed(self):
+        target, why = self._pick(self.MORNING, catch_up=True, analysed=[date(2026, 9, 23)])
+        assert target is None and "already been analysed" in why
+
+    def test_a_non_trading_day_catches_up_on_the_last_session(self):
+        # Saturday: the newest bar is Friday's, and Friday's evening was missed.
+        target, _ = self._pick(datetime(2026, 9, 26, 10, 0), catch_up=True,
+                               sessions=[date(2026, 9, 24), date(2026, 9, 25)],
+                               today=date(2026, 9, 26))
+        assert target == date(2026, 9, 25)
+
+    def test_a_non_trading_day_without_catch_up_does_nothing(self):
+        target, why = self._pick(datetime(2026, 9, 26, 10, 0),
+                                 sessions=[date(2026, 9, 25)], today=date(2026, 9, 26))
+        assert target is None and "market closed today" in why
+
+    def test_force_takes_the_newest_bar_whatever_the_time(self):
+        assert self._pick(self.MORNING, force=True)[0] == date(2026, 9, 24)
+
+    def test_no_price_data_is_refused(self):
+        target, why = self._pick(self.EVENING, sessions=[])
+        assert target is None and "no trading sessions" in why

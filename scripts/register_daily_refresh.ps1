@@ -18,7 +18,13 @@ an evening run sees the final close and the day's filings with a full quota.
 The window is enforced by the script itself (--until), not only by Task
 Scheduler: no analysis is started that would not finish by the end, the batch
 is killed outright if it is still going a minute before, and a run that starts
-too late (the laptop was asleep until 19:55, say) does nothing. Task
+too late (the laptop was asleep until 19:55, say) does nothing.
+
+--catch-up handles the opposite case. If the machine was off at 19:00, Windows
+starts the task whenever it next can, often the following morning while the
+market is open. Analysing a half-finished session would be wrong, so the run
+instead analyses the last session that actually closed - and skips even that
+if it has already been analysed, so a catch-up never re-spends the quota. Task
 Scheduler's own time limit is a backstop set just past the window.
 
 Settings chosen for a laptop: runs on battery and is not killed when the
@@ -64,7 +70,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # Python is run directly (no cmd.exe wrapper): the script writes and rotates
 # its own log, flushed line by line, so output up to any crash is kept.
-$argLine = "scripts\daily_refresh.py --until $End --log `"$log`""
+$argLine = "scripts\daily_refresh.py --until $End --catch-up --log `"$log`""
 $action  = New-ScheduledTaskAction -Execute $python -Argument $argLine -WorkingDirectory $repo
 $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $Start
 $settingsArgs = @{

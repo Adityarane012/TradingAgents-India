@@ -146,6 +146,61 @@ def _download_closes(tickers: list[str], attempts: int = 3, wait_s: float = 60.0
     return None
 
 
+def analysed_sessions() -> set[date]:
+    """Trade dates that already have at least one successful analysis."""
+    out = set()
+    for row in read_complete_rows(RUNS_CSV):
+        if row.get("status") == "ok":
+            with suppress(ValueError):
+                out.add(datetime.strptime(row["date"], "%Y-%m-%d").date())
+    return out
+
+
+def pick_session(
+    sessions: list[date],
+    today: date,
+    now: datetime,
+    *,
+    catch_up: bool,
+    analysed: set[date],
+    force: bool = False,
+) -> tuple[date | None, str]:
+    """Which trading session to analyse, or (None, why not).
+
+    Normally that is today, once the market has closed. When today's session
+    is still open — or today is a weekend or holiday — there is nothing new to
+    analyse, and the run does nothing. With --catch-up it instead analyses the
+    last completed session, but only if no analysis for that session exists
+    yet: that is how a missed evening is recovered the next morning without
+    re-spending quota on a session already covered.
+    """
+    if not sessions:
+        return None, "no trading sessions in the price data"
+    latest = max(sessions)
+    if force:
+        return latest, ""
+    if latest == today and session_is_final(latest, today, now):
+        return today, ""
+
+    earlier = [d for d in sessions if d < today]
+    candidate = latest if latest != today else (max(earlier) if earlier else None)
+    if latest == today:
+        why = (f"today's session is still open (NSE closes {MARKET_CLOSE:%H:%M}); the latest "
+               f"price is an intraday quote, not a close")
+    else:
+        why = f"the latest trading session is {latest}, not today — market closed today"
+    if not catch_up:
+        return None, f"{why}. Nothing done; the evening run analyses the finished session."
+    if candidate is None:
+        return None, f"{why}, and no earlier session to fall back on."
+    if candidate in analysed:
+        return None, (f"{why}. The last finished session ({candidate}) has already been "
+                      f"analysed, so there is nothing to catch up on.")
+    return candidate, (f"{why}. Catching up on the last finished session, {candidate}: "
+                       f"reports are dated that day, and live-only sources (RBI rates, "
+                       f"put-call ratio, screener) refuse to serve a past date.")
+
+
 def session_is_final(latest_bar: date, today: date, now: datetime) -> bool:
     """Whether the newest bar is a finished session rather than a live quote.
 
@@ -199,7 +254,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-age-days", type=int, default=14,
                     help="Re-analyse anything whose report is older than this (default 14).")
     ap.add_argument("--force", action="store_true",
-                    help="Run even if no trading session is found for today.")
+                    help="Run even if today's session is unfinished or absent.")
+    ap.add_argument("--catch-up", action="store_true",
+                    help="If the evening run was missed, analyse the last finished "
+                         "session instead of doing nothing (skipped if it was already "
+                         "analysed). Used by the scheduled task.")
     ap.add_argument("--no-nse", action="store_true",
                     help="Skip the NSE filing checks (price and age triggers only).")
     ap.add_argument("--until", default=None, metavar="HH:MM",
@@ -250,16 +309,15 @@ def _refresh(args) -> int:
     if closes is None:
         print("  no price data after retries (offline?). Nothing done; the next run catches up.")
         return 1
-    latest_bar = closes.index.max().date()
-    if latest_bar != today and not args.force:
-        print(f"  latest trading session is {latest_bar}, not today — market closed or "
-              f"data not published yet. Nothing to do (use --force to override).")
+    sessions = [d.date() for d in closes.index]
+    target, note = pick_session(sessions, today, started, catch_up=args.catch_up,
+                                analysed=analysed_sessions(), force=args.force)
+    if target is None:
+        print(f"  {note}")
         return 0
-    if not session_is_final(latest_bar, today, datetime.now()) and not args.force:
-        print(f"  today's session is still open (NSE closes {MARKET_CLOSE:%H:%M}); the latest "
-              f"price is an intraday quote, not a close. Nothing done — the evening run will "
-              f"analyse the finished session (use --force to override).")
-        return 0
+    if note:
+        print(f"  {note}")
+    today, today_s = target, target.isoformat()
 
     last = load_last_reports(RUNS_CSV)
     assessments = [
