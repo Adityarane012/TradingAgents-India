@@ -226,6 +226,14 @@ Google feed misses. Check that before adding one.
 
 ## Considered and rejected
 
+- **Finnhub** (checked 2026-09-25). Its marketing lists NSE, and that is true —
+  but not on the free tier. Historical candles moved to the premium plans and a
+  free key gets `403 "You don't have access to this resource"`; the free tier is
+  US equities for most endpoints, and international markets start around
+  $50/month. It would cost money for the daily bars yfinance already serves
+  free, and it still would not give the one thing worth paying for here
+  (per-stock NSE derivatives — see Tier 2).
+
 - **MCP-India-Stack** (github.com/rehan1020/MCP-India-Stack), reviewed
   2026-09-22. 76+ tools for GSTIN/PAN/IFSC/UPI validation, income-tax and
   GST calculators, EMI/PPF/SIP calculators, court and RTI helpers. It is built
