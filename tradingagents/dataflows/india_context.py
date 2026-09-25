@@ -28,6 +28,7 @@ from __future__ import annotations
 from datetime import date
 
 from .config import get_config
+from .earnings_quality import earnings_quality_block
 from .india_relative import commodity_fx_block, relative_strength_block
 from .nse_india import (
     announcements_block,
@@ -121,6 +122,14 @@ def india_ownership_context(ticker: str, curr_date: str | date | None = None) ->
         # cross-checks its promoter figure against them.
         + ownership_split_block(ticker, curr_date, _nse_promoter_pct(ticker, curr_date))
     )
+
+
+def india_earnings_quality_context(ticker: str, curr_date: str | date | None = None) -> str:
+    """The profit-to-cash reconciliation and quarterly profit quality, for the
+    fundamentals analyst. Returns ``""`` when this ticker is not in scope."""
+    if not india_data_enabled(ticker):
+        return ""
+    return earnings_quality_block(ticker, curr_date)
 
 
 def india_relative_context(ticker: str, curr_date: str | date | None = None) -> str:

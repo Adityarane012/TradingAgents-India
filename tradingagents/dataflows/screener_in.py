@@ -125,11 +125,61 @@ class QuarterHolding:
     others: float = 0.0
 
 
+# Quarterly P&L rows, as screener renders them, mapped to our field names.
+# These are the only quarterly financials available free for NSE names: there
+# is no quarterly cash flow or balance sheet on screener (both are annual), and
+# yfinance has no quarterly cash flow for many Indian companies at all.
+_QUARTER_ROWS = {
+    "sales": "sales",
+    "expenses": "expenses",
+    "operating profit": "operating_profit",
+    "opm %": "opm_pct",
+    "other income": "other_income",
+    "interest": "interest",
+    "depreciation": "depreciation",
+    "profit before tax": "pbt",
+    "tax %": "tax_pct",
+    "net profit": "net_profit",
+    "eps in rs": "eps",
+}
+# Annual cash-flow rows. "CFO/OP" is screener's own earnings-quality ratio
+# (cash from operations over operating profit) — the cheapest available answer
+# to "does reported profit turn into cash", and an independent cross-check on
+# the figures computed from yfinance's line items.
+_CASHFLOW_ROWS = {
+    "cash from operating activity": "cfo",
+    "free cash flow": "fcf",
+    "cfo/op": "cfo_over_op",
+}
+
+
+@dataclass(frozen=True)
+class QuarterResult:
+    """One quarter of the P&L, in the units screener renders (Rs crore)."""
+
+    quarter: str  # as labelled, e.g. "Jun 2026" — a quarter END, not a filing date
+    sales: float | None = None
+    expenses: float | None = None
+    operating_profit: float | None = None
+    opm_pct: float | None = None
+    other_income: float | None = None
+    interest: float | None = None
+    depreciation: float | None = None
+    pbt: float | None = None
+    tax_pct: float | None = None
+    net_profit: float | None = None
+    eps: float | None = None
+
+
 @dataclass(frozen=True)
 class CompanySnapshot:
     ratios: dict[str, str]
     holdings: list[QuarterHolding] = field(default_factory=list)
     shareholders: str | None = None
+    quarters: list[QuarterResult] = field(default_factory=list)
+    # Annual series keyed by fiscal year label ("Mar 2025"), for CFO, FCF and
+    # screener's CFO/OP ratio.
+    annual_cash: dict[str, dict[str, float | None]] = field(default_factory=dict)
 
 
 def _fetch(symbol: str) -> str:
@@ -260,6 +310,49 @@ def _parse_holdings(sel: Selector) -> tuple[list[QuarterHolding], str | None]:
     return holdings, shareholders
 
 
+def _parse_table(sel: Selector, section: str, wanted: dict[str, str]) -> tuple[list[str], dict]:
+    """(column labels, {our_key: [values]}) for one of screener's statement
+    tables. Rows we don't want are ignored; a missing row is simply absent, so
+    a company that doesn't report it is not rejected."""
+    table = sel.css(f"#{section} table")
+    if not table:
+        return [], {}
+    table = table[0]
+    columns = [" ".join(t.split()) for t in table.css("thead th ::text").getall() if t.strip()]
+    rows: dict[str, list[float | None]] = {}
+    for tr in table.css("tbody tr"):
+        cells = [" ".join("".join(td.css("::text").getall()).split()) for td in tr.css("td")]
+        if not cells:
+            continue
+        label = cells[0].rstrip(" +").strip().lower()
+        key = wanted.get(label)
+        if key:
+            rows[key] = [to_float(c.replace("%", "").replace(",", "")) for c in cells[1:]]
+    return columns, rows
+
+
+def _parse_quarters(sel: Selector) -> list[QuarterResult]:
+    columns, rows = _parse_table(sel, "quarters", _QUARTER_ROWS)
+    out: list[QuarterResult] = []
+    for i, quarter in enumerate(columns):
+        values = {}
+        for key, series in rows.items():
+            values[key] = series[i] if i < len(series) else None
+        # A column with no sales and no profit is not a usable quarter.
+        if values.get("sales") is None and values.get("net_profit") is None:
+            continue
+        out.append(QuarterResult(quarter=quarter, **values))
+    return out
+
+
+def _parse_annual_cash(sel: Selector) -> dict[str, dict[str, float | None]]:
+    columns, rows = _parse_table(sel, "cash-flow", _CASHFLOW_ROWS)
+    return {
+        year: {key: (series[i] if i < len(series) else None) for key, series in rows.items()}
+        for i, year in enumerate(columns)
+    }
+
+
 def get_snapshot(ticker: str, curr_date: str | date | None = None) -> CompanySnapshot:
     """Ratios and the ownership split for ``ticker``. Live runs only."""
     if not screener_enabled():
@@ -278,9 +371,12 @@ def get_snapshot(ticker: str, curr_date: str | date | None = None) -> CompanySna
     with schema_guard(_SRC, "company page"):
         ratios = _parse_ratios(sel)
         holdings, shareholders = _parse_holdings(sel)
+        quarters = _parse_quarters(sel)
+        annual_cash = _parse_annual_cash(sel)
     if not ratios:
         raise IndiaDataInvalid(_SRC, "no headline ratios found; the page layout may have changed")
-    return CompanySnapshot(ratios=ratios, holdings=holdings[-_QUARTERS:], shareholders=shareholders)
+    return CompanySnapshot(ratios=ratios, holdings=holdings[-_QUARTERS:], shareholders=shareholders,
+                           quarters=quarters, annual_cash=annual_cash)
 
 
 def ownership_split_block(

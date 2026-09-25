@@ -8,7 +8,10 @@ from tradingagents.agents.utils.agent_utils import (
     get_instrument_context_from_state,
     get_language_instruction,
 )
-from tradingagents.dataflows.india_context import india_ownership_context
+from tradingagents.dataflows.india_context import (
+    india_earnings_quality_context,
+    india_ownership_context,
+)
 from tradingagents.dataflows.symbol_utils import is_india_ticker
 
 # Promoter shareholding used to be listed here as simply unavailable. It is
@@ -57,6 +60,10 @@ def create_fundamentals_analyst(llm):
             # when india_data_enabled=False). Appended after the note above so
             # the model reads the caveats before the data they apply to.
             + india_ownership_context(ticker, current_date)
+            # Whether reported profit turns into cash: computed from the annual
+            # cash flow and screener's quarterly P&L, since no free source has
+            # quarterly cash flow for NSE names.
+            + india_earnings_quality_context(ticker, current_date)
             + get_language_instruction()
         )
 
