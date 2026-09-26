@@ -105,6 +105,109 @@ Still open: nothing verifies FinBERT against what prices did next. Fold it into
 F7 — if its tally has no relationship to the following week's return, it is
 decoration.
 
+### F8. Tell a quiet scan apart from a broken one — agreed, not yet built
+
+`refresh_<date>.md` says "Nothing changed enough to re-analyse today" in two
+different situations: a genuinely calm day, and a day when NSE blocked every
+filing lookup so the filing triggers could never fire. Those look identical
+today, which means a broken scan reports success.
+
+Agreed with the user 2026-09-25/26. Scoring, ranking and the bullish/bearish
+wording stay exactly as they are; this is about honesty in the summary.
+
+## The problem being solved
+`refresh_<date>.md` currently says "Nothing changed enough to re-analyse today."
+That sentence is produced by **two completely different situations**:
+
+1. The scan ran, every source answered, and genuinely nothing crossed a threshold.
+2. NSE blocked us, every filing lookup failed, and the triggers that depend on
+   filings could never fire.
+
+Today those look identical, in the log and in the summary. That is the failsafe
+gap you pointed at: a broken scan reports success.
+
+## What is NOT changing (your call)
+- Trigger scoring, the numbers, and the ranking stay exactly as they are.
+- Bullish/bearish wording in reports stays.
+- No new LLM calls, no new network calls. Everything here is computed from data
+  the scan already collected.
+
+## Design
+
+### 1. New pure module: `tradingagents/dataflows/scan_health.py`
+```python
+@dataclass(frozen=True)
+class ScanHealth:
+    scanned: int              # tickers in the universe
+    triggered: int
+    failed_lookups: int       # tickers where >=1 source errored (Assessment.notes)
+    reasons: dict[str, int]   # "filings unavailable" -> 12, "no price data" -> 3
+    history: list[int]        # triggered counts of previous scans, oldest first
+
+    degraded: bool            # a source is broken: failed >= 20% of universe
+    silent_failure: bool      # degraded AND triggered == 0  <- the dangerous case
+    verdict: str              # one line for the summary and the log
+```
+- `assess(assessments, triggered, history)` builds it.
+- `scan_history(refresh_log_csv, limit)` reads previous scans' trigger counts —
+  context for judging whether today's count is plausible.
+
+Thresholds (named constants, not magic numbers):
+- `DEGRADED_FRACTION = 0.2` — 10 of 50 tickers failing a lookup means the source,
+  not the ticker, is broken.
+- Zero triggers is always called out, because it has never happened: the
+  observed history is 5, 8, 14, 19.
+
+### 2. `daily_refresh.py` wiring
+- Always write a **scope section** to the summary, whatever the outcome:
+  ```
+  ## Scan scope
+  50 tickers · NSE filings + shareholding, yfinance closes, Google News (per stock)
+  · price threshold 5% · max age 14 days · window ending 2026-09-25
+  Lookups that failed: 3 of 50 (filings unavailable: 3)
+  Previous scans triggered: 5, 8, 14, 19 · today: 8
+  ```
+- If `silent_failure`: put a warning **at the top** of the summary, not the
+  bottom, and say plainly that the absence of triggers is not evidence of calm.
+- Exit code **4** for a silent failure, so Task Scheduler's LastTaskResult shows
+  something other than 0 and the operator can see it without opening files.
+  (0 = normal, 1 = no price data, 3 = another run holds the lock, 4 = silent failure.)
+- Zero triggers without failures: not an error, but stated as unusual with the
+  history line beside it.
+
+### 3. Evidence grouping in the "Re-analysing" table
+Trigger kinds already carry this; just label them so a reader is not left to
+infer why a stock is listed:
+- `filing`, `shareholding` -> **Filed** (an exchange document, with its date)
+- `price` -> **Measured** (computed from closes)
+- `new`, `stale` -> **Housekeeping** (no new information, just coverage age)
+
+One extra column, no new data.
+
+## Tests (`tests/test_scan_health.py`)
+1. clean scan, some triggers -> not degraded, no warning
+2. 12 of 50 lookups failed -> degraded
+3. 12 failed AND 0 triggered -> silent_failure, exit code 4
+4. 0 triggered, 0 failures -> not degraded, but flagged unusual
+5. reason counting groups by kind, not by ticker
+6. history read from refresh_log.csv, newest last, malformed rows skipped
+7. threshold boundary: exactly 20% degraded, 19.9% not
+8. verdict wording differs for each state
+9. daily_refresh writes the scope section on a nothing-triggered run
+10. mutation check: break the fraction test, confirm failures
+
+## Order of work
+1. `scan_health.py` + its tests (pure, fast)
+2. wire into `daily_refresh.py`, exit code, summary sections
+3. evidence labels in the table
+4. full suite + ruff, live dry-run, commit
+
+## Deliberately out of scope
+- Changing what triggers (that is the scoring model, which you kept)
+- Backtesting whether triggers predict anything — that is F7
+- Alerting on a rating change (F6)
+
+
 ### F5. Local model for the quick-thinking roles (zero quota)
 Run `quick_think_llm` on a local open-weight model through Ollama. That covers
 the analysts' tool-calling and the debate turns. Keep Gemini for
