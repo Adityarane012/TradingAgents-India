@@ -83,6 +83,24 @@ class Assessment:
         return bool(self.triggers)
 
 
+# What kind of evidence a trigger rests on. A reader of the briefing should not
+# have to infer why a stock is listed: an exchange filing is a fact with a date,
+# a price move is something we measured, and "never analysed"/"stale" are
+# housekeeping — no new information at all, just coverage age.
+EVIDENCE_CLASS = {
+    "filing": "Filed",
+    "shareholding": "Filed",
+    "price": "Measured",
+    "new": "Housekeeping",
+    "stale": "Housekeeping",
+}
+
+
+def evidence_class(kind: str) -> str:
+    """The evidence class of a trigger kind, for the briefing."""
+    return EVIDENCE_CLASS.get(kind, "Other")
+
+
 def load_last_reports(csv_path: Path) -> dict[str, LastReport]:
     """Latest successful run per ticker from the batch runner's CSV."""
     latest: dict[str, LastReport] = {}

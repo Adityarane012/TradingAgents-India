@@ -306,3 +306,31 @@ class TestConcurrentWrites:
         assert errors == []
         assert target.read_text(encoding="utf-8").startswith("payload ")
         assert [p.name for p in tmp_path.iterdir()] == ["cache.csv"]  # no temps left
+
+
+class TestCompletenessLength:
+    """A "complete" last field means different things per file.
+
+    The runs CSV ends with a timestamp (19 chars); the scan log ends with a
+    date (10). Inferring it from the content cannot work, because "2026-09-21"
+    is both a whole date and a truncated timestamp — so the caller states it.
+    """
+
+    def test_a_date_only_column_is_complete_when_that_is_what_it_holds(self):
+        row = {"scan_date": "2026-09-21", "ticker": "X.NS", "decision": "analyse"}
+        assert is_complete_row(row, "scan_date", min_length=10) is True
+        assert is_complete_row(row, "scan_date") is False  # judged as a timestamp
+
+    def test_a_truncated_timestamp_is_caught_at_either_length(self):
+        # "2026-09-21T19:1" is longer than 10 characters, so the length rule
+        # alone would accept it at the looser setting — it is rejected because
+        # fromisoformat cannot parse a half-written time. Both guards matter.
+        row = {"ticker": "X.NS", "run_at": "2026-09-21T19:1"}
+        assert is_complete_row(row, "run_at") is False
+        assert is_complete_row(row, "run_at", min_length=10) is False
+
+    def test_length_is_what_catches_a_date_where_a_timestamp_belongs(self):
+        # This one parses cleanly, so only the length rule rejects it.
+        row = {"ticker": "X.NS", "run_at": "2026-09-21"}
+        assert is_complete_row(row, "run_at") is False
+        assert is_complete_row(row, "run_at", min_length=10) is True

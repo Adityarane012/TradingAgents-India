@@ -20,6 +20,10 @@ Every real scan is appended to <results_dir>/refresh_log.csv, and a readable
 summary is written to <results_dir>/refresh_<date>.md (a second run that day is
 added below the first; a --dry-run writes refresh_<date>_dryrun.md instead).
 
+A failed scan is never reported as a quiet day: if a fifth of the universe loses
+a lookup and nothing triggers, the briefing says so at the top and the run exits
+4 (see tradingagents/dataflows/scan_health.py).
+
 Crash safety — the machine may sleep, lose power or be killed at any point:
   - only one refresh or batch runs at a time (an OS lock, never left stale);
   - india_universe_runs.csv is backed up to <results_dir>/backups before any
@@ -51,6 +55,7 @@ from tradingagents.dataflows.india_data_common import IST
 from tradingagents.dataflows.india_universe import NIFTY_50_APPROX
 from tradingagents.dataflows.refresh_triggers import (
     evaluate,
+    evidence_class,
     load_last_reports,
     select,
 )
@@ -64,6 +69,7 @@ from tradingagents.dataflows.safe_io import (
     rotate_log,
     single_instance,
 )
+from tradingagents.dataflows.scan_health import assess, scan_history, scope_lines
 from tradingagents.dataflows.utils import get_current_date
 from tradingagents.default_config import DEFAULT_CONFIG
 
@@ -342,12 +348,24 @@ def _refresh(args) -> int:
     earlier = "" if args.dry_run or not summary.exists() else (
         summary.read_text(encoding="utf-8").rstrip() + "\n\n---\n\n")
 
-    lines = [f"# Daily refresh — {today_s} {started:%H:%M}", "",
-             f"Scanned {len(tickers)} · triggered {len(selected) + len(deferred)} · "
-             f"analysing {len(selected)} · deferred {len(deferred)}", ""]
+    # How the scan itself went, so "nothing triggered" can be told apart from
+    # "every filing lookup failed". Costs nothing: it reads the notes already
+    # collected during evaluation.
+    health = assess(assessments, len(selected) + len(deferred),
+                    scan_history(LOG_CSV, exclude=today_s))
+    print(f"  {health.verdict}")
+
+    lines = [f"# Daily refresh — {today_s} {started:%H:%M}", ""]
+    if health.silent_failure:
+        # At the top, not the bottom: this is the case that used to read as calm.
+        lines += [f"> **{health.verdict}**", ""]
+    lines += [f"Scanned {len(tickers)} · triggered {len(selected) + len(deferred)} · "
+              f"analysing {len(selected)} · deferred {len(deferred)}", ""]
     if selected:
-        lines += ["## Re-analysing", "", "| Ticker | Score | Why |", "|---|---|---|"]
+        lines += ["## Re-analysing", "",
+                  "| Ticker | Score | Evidence | Why |", "|---|---|---|---|"]
         lines += [f"| {a.ticker} | {a.score:.0f} | "
+                  + "/".join(dict.fromkeys(evidence_class(t.kind) for t in a.triggers)) + " | "
                   + "; ".join(f"{t.kind}: {t.detail}" for t in a.triggers) + " |"
                   for a in selected]
     if deferred:
@@ -358,13 +376,29 @@ def _refresh(args) -> int:
     if notes:
         lines += ["", "## Lookups that failed (did not block the scan)", ""]
         lines += [f"- {a.ticker}: {'; '.join(a.notes)}" for a in notes]
+    # Always stated, whatever the outcome: a briefing that reports nothing has to
+    # say what it looked at, or a reader cannot tell coverage from silence.
+    sources = ["yfinance closes"]
+    if not args.no_nse:
+        sources += ["NSE announcements", "NSE shareholding filings"]
+    lines += ["", *scope_lines(
+        health,
+        sources=sources,
+        parameters=[f"price move >= {args.price_threshold:g}% since the last report",
+                    f"report older than {args.max_age_days} days",
+                    f"at most {args.max_tickers} analyses"],
+    )]
     print("\n".join(lines))
 
     if args.dry_run or not selected:
         if not selected:
-            print("\nNothing changed enough to re-analyse today.")
+            print("\nNothing triggered, and the scan was degraded — see the warning above."
+                  if health.degraded else
+                  "\nNothing changed enough to re-analyse today.")
         _write_summary(summary, earlier, lines)
-        return 0
+        # 4 rather than 0 so Task Scheduler's LastTaskResult shows that a scan
+        # reported nothing while its sources were failing.
+        return 4 if health.silent_failure else 0
 
     saved = backup(RUNS_CSV, RESULTS / "backups", f"{today_s}_{started:%H%M%S}")
     if saved:

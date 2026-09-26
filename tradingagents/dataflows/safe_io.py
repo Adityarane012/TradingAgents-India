@@ -89,25 +89,31 @@ def append_csv_row(path: Path, fieldnames: list[str], row: dict) -> None:
         os.fsync(handle.fileno())
 
 
-def is_complete_row(row: dict, last_field: str = "run_at") -> bool:
+def is_complete_row(row: dict, last_field: str = "run_at", min_length: int = 19) -> bool:
     """A row cut short by a crash is missing fields or ends in a partial
-    timestamp. The runs CSV ends with run_at, which makes that checkable."""
+    timestamp. The runs CSV ends with run_at, which makes that checkable.
+
+    ``min_length`` is what a whole value looks like: 19 for a timestamp
+    (yyyy-mm-ddThh:mm:ss), 10 for a date-only column such as the scan log's
+    scan_date. Stating it per caller beats guessing from the content, because
+    "2026-09-21" is a complete date and a truncated timestamp."""
     if None in row or any(v is None for v in row.values()):
         return False
     try:
         datetime.fromisoformat(row[last_field])
     except (KeyError, TypeError, ValueError):
         return False
-    return len(row[last_field]) >= 19  # yyyy-mm-ddThh:mm:ss
+    return len(row[last_field]) >= min_length
 
 
-def read_complete_rows(path: Path, last_field: str = "run_at") -> Iterator[dict]:
+def read_complete_rows(path: Path, last_field: str = "run_at",
+                       min_length: int = 19) -> Iterator[dict]:
     path = Path(path)
     if not path.exists():
         return
     with path.open(encoding="utf-8", newline="") as handle:
         for row in csv.DictReader(handle):
-            if is_complete_row(row, last_field):
+            if is_complete_row(row, last_field, min_length):
                 yield row
 
 
