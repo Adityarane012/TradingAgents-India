@@ -335,6 +335,7 @@ Numbers that were measured, not assumed. Re-check before relying on them.
 | MoSPI API | keyless, live; WPI Apr-2026 = 167; needs legacy TLS | 2026-09-22 |
 | FRED India CPI | stale since March 2025 | 2026-09-20 |
 | Promoter pledging | unavailable: NSE endpoint empty, screener has none | 2026-09-21 |
+| Trigger counts observed | 5, 8, 10, 14, 19, 27 — never zero | to 2026-09-26 |
 | `TATAMOTORS.NS` | dead since the demerger; use `TMCV.NS` | earlier |
 
 ---
@@ -373,7 +374,13 @@ Bash, which eats backslashes in Windows paths — use forward slashes.
 same 500. On 2026-09-21 a manual batch consumed it and the refresh lost NESTLEIND
 and ULTRACEMCO to `RESOURCE_EXHAUSTED`.
 
-**7.8 An analyst tool's frequency argument matters.** The model chooses quarterly
+**7.8 "Complete" depends on the file.** `is_complete_row` guards against rows
+torn by a crash by checking the last column parses and is long enough. The runs
+CSV ends in a timestamp (19 chars) and the scan log in a date (10), and
+"2026-09-21" is both a whole date and a truncated timestamp — so the caller
+passes the length it expects. Reusing the default silently returned no history.
+
+**7.9 An analyst tool's frequency argument matters.** The model chooses quarterly
 or annual; for NSE names quarterly cash flow often does not exist, so it saw
 nothing. Prefer annual, or fall back.
 
@@ -400,7 +407,8 @@ powershell -ExecutionPolicy Bypass -File scripts/register_daily_refresh.ps1 -Wak
 ```
 
 **Exit codes.** `daily_refresh`: 0 normal, 1 no price data after retries, 3
-another run holds the lock. (F8 adds 4 for a silently degraded scan.)
+another run holds the lock, 4 the scan reported nothing while a fifth or more of
+its lookups failed (a silent failure — treat the day as unscanned).
 `analyze_india_universe`: 0 normal, 2 `--free` without `GOOGLE_API_KEY`, 3 lock
 held.
 
@@ -431,9 +439,11 @@ Full detail in `future_plans.md`. The honest ranking:
    Overweight and 41 Hold on 2026-09-21). That may be a real market move, or the
    richer news feed shifting tone, or selection bias from filing-triggered stocks.
    Unknown until measured. The user asked to be reminded of this.
-2. **F8 — tell a quiet scan from a broken one.** Agreed and designed (in
-   `future_plans.md`), not built. "Nothing changed" and "every filing lookup
-   failed" currently look identical.
+2. ~~**F8 — tell a quiet scan from a broken one.**~~ **Done 2026-09-26**
+   (`scan_health.py`). Four states, a scope section in every briefing, exit code
+   4 for a scan that reported nothing while its sources failed, and an evidence
+   column in the table. Still open from that thread: showing an event date
+   separately from a publication date.
 3. **F0/F2 — count requests per stock, then pre-compute the market analyst's
    indicators.** The only real way to raise the daily stock count (~30–40% more).
 4. **Rating rubric + "track disconfirming evidence as rigorously as confirming
