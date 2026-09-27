@@ -335,7 +335,7 @@ Numbers that were measured, not assumed. Re-check before relying on them.
 | MoSPI API | keyless, live; WPI Apr-2026 = 167; needs legacy TLS | 2026-09-22 |
 | FRED India CPI | stale since March 2025 | 2026-09-20 |
 | Promoter pledging | unavailable: NSE endpoint empty, screener has none | 2026-09-21 |
-| Trigger counts observed | 5, 8, 10, 14, 19, 27 — never zero | to 2026-09-26 |
+| Trigger counts observed | 5, 5, 7, 8, 14, 19 per scan — never zero | to 2026-09-27 |
 | `TATAMOTORS.NS` | dead since the demerger; use `TMCV.NS` | earlier |
 
 ---
