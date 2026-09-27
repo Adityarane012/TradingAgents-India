@@ -195,3 +195,54 @@ def test_india_rss_registered_as_global_news_vendor():
     from tradingagents.dataflows.interface import VENDOR_METHODS
 
     assert VENDOR_METHODS["get_global_news"]["india_rss"] is india_news.get_global_news_india
+
+
+class TestUndatedItemsDoNotBreakSorting:
+    """One unparseable pubDate used to lose the whole vendor.
+
+    The feeds publish tz-aware timestamps. Sorting them against a naive
+    sentinel raised "can't compare offset-naive and offset-aware datetimes",
+    which surfaced in a live run as
+    ``Vendor 'india_rss' failed for get_global_news`` — the news chain then
+    fell through to another vendor, so India-specific headlines went missing
+    without anything failing loudly.
+    """
+
+    def _patch_feeds(self, et_result, mint_result):
+        def fake_fetch(name, url):
+            return et_result if name == "Economic Times" else mint_result
+        return patch.object(india_news, "_fetch_feed", side_effect=fake_fetch)
+
+    def _items(self):
+        import datetime as dt
+
+        # Today, so the window reaches the present and in_window keeps the
+        # undated item instead of dropping it before the sort is reached.
+        today = dt.datetime.now(dt.timezone.utc)
+        dated = {"title": "RBI holds repo rate", "summary": "s", "link": "l1",
+                 "pub_date": today - dt.timedelta(hours=2), "source": "Economic Times"}
+        undated = {"title": "Undated market wrap", "summary": "s", "link": "l2",
+                   "pub_date": None, "source": "Mint"}
+        return today.strftime("%Y-%m-%d"), dated, undated
+
+    @pytest.mark.unit
+    def test_an_undated_item_beside_dated_ones_does_not_raise(self):
+        curr_date, dated, undated = self._items()
+        with self._patch_feeds(et_result=[dated], mint_result=[undated]):
+            out = india_news.get_global_news_india(curr_date, look_back_days=7, limit=10)
+        assert "RBI holds repo rate" in out
+        assert "Undated market wrap" in out
+
+    @pytest.mark.unit
+    def test_dated_headlines_sort_ahead_of_undated_ones(self):
+        curr_date, dated, undated = self._items()
+        with self._patch_feeds(et_result=[dated], mint_result=[undated]):
+            out = india_news.get_global_news_india(curr_date, look_back_days=7, limit=10)
+        assert out.index("RBI holds repo rate") < out.index("Undated market wrap")
+
+    @pytest.mark.unit
+    def test_only_undated_items_still_render(self):
+        curr_date, _, undated = self._items()
+        with self._patch_feeds(et_result=[undated], mint_result=[]):
+            out = india_news.get_global_news_india(curr_date, look_back_days=7, limit=10)
+        assert "Undated market wrap" in out

@@ -27,12 +27,12 @@ import email.utils
 import http.client
 import logging
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from .config import get_config
-from .date_window import in_window
+from .date_window import in_window, to_utc
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,10 @@ _TIMEOUT = 10.0
 # compromised endpoint can't stream an unbounded body into memory (matches
 # reddit.py's _MAX_FEED_BYTES).
 _MAX_FEED_BYTES = 5 * 1024 * 1024
+
+# Sort sentinel for an item whose pub_date could not be parsed. UTC-aware, so it
+# compares against the feeds' tz-aware timestamps instead of raising.
+_UNDATED = datetime.min.replace(tzinfo=timezone.utc)
 
 
 def _read_capped(resp) -> bytes:
@@ -171,7 +175,13 @@ def get_global_news_india(
 
     # Newest first, then de-dup by title (both feeds occasionally cover the
     # same story) before applying the caller's limit.
-    windowed.sort(key=lambda a: a["pub_date"] or datetime.min, reverse=True)
+    #
+    # Every key goes through to_utc: the feeds publish tz-aware timestamps, so a
+    # naive sentinel for an undated item would raise "can't compare offset-naive
+    # and offset-aware datetimes" and lose the whole vendor for one bad item.
+    # Undated sorts oldest, which keeps dated headlines ahead of it.
+    windowed.sort(key=lambda a: to_utc(a["pub_date"]) if a["pub_date"] else _UNDATED,
+                  reverse=True)
     seen_titles: set[str] = set()
     kept = []
     for article in windowed:
