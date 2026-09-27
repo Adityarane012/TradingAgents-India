@@ -221,3 +221,19 @@ __marimo__/
 # Enterprise env file (secrets) and generated run reports
 .env.enterprise
 reports/
+
+# Knowledge-graph output, if /graphify is ever run over this repo: a rebuildable
+# artifact of the source, and a stale one is worse than none.
+graphify-out/
+
+# Claude Code's per-machine settings. A shared .claude/settings.json is worth
+# committing; the .local.json beside it holds one machine's own permissions.
+.claude/settings.local.json
+
+# Patch and merge leftovers
+*.orig
+*.rej
+
+# Windows shell droppings
+Thumbs.db
+desktop.ini
