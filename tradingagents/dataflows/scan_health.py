@@ -152,8 +152,20 @@ def scan_history(log_csv: Path, limit: int = HISTORY_SCANS, exclude: str | None 
 
     Context for judging today's number: "0 triggered" reads very differently
     beside 5, 8, 14, 19 than it would beside 0, 0, 1.
+
+    The log carries one row per stock per scan and only a ``scan_date``, never a
+    run time, so a day that was scanned twice — a missed evening picked up by
+    ``--catch-up`` the next morning, or a manual re-run — holds two rows per
+    stock. Summing them reported 24 September as a single scan of 27 triggers
+    when it was really 19 in the morning and 8 in the evening, inflating the
+    baseline that today's count is judged against.
+
+    So each stock keeps only its last decision for the day, which counts the
+    last scan of that date rather than every run added together. That is the
+    scan whose triggers were acted on, and it needs no new column.
     """
-    per_date: dict[str, int] = {}
+    # scan_date -> ticker -> that ticker's most recent decision on the day.
+    per_date: dict[str, dict[str, str]] = {}
     try:
         # scan_date is a date, not a timestamp, so a complete value is 10 chars.
         for row in read_complete_rows(Path(log_csv), last_field="scan_date",
@@ -161,13 +173,17 @@ def scan_history(log_csv: Path, limit: int = HISTORY_SCANS, exclude: str | None 
             scan_date = row.get("scan_date")
             if not scan_date or scan_date == exclude:
                 continue
-            per_date.setdefault(scan_date, 0)
-            if (row.get("decision") or "").strip().lower() in _TRIGGERED_DECISIONS:
-                per_date[scan_date] += 1
+            per_date.setdefault(scan_date, {})
+            ticker = (row.get("ticker") or "").strip()
+            if not ticker:  # can't tell a re-scan from a new stock without one
+                continue
+            per_date[scan_date][ticker] = (row.get("decision") or "").strip().lower()
     except OSError as exc:  # a missing or unreadable log is context, not an error
         logger.debug("no scan history available: %s", exc)
         return []
-    return [per_date[day] for day in sorted(per_date)][-limit:]
+    return [sum(1 for decision in per_date[day].values()
+                if decision in _TRIGGERED_DECISIONS)
+            for day in sorted(per_date)][-limit:]
 
 
 def scope_lines(health: ScanHealth, sources: list[str], parameters: list[str]) -> list[str]:

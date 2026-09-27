@@ -153,6 +153,46 @@ class TestHistory:
     def test_a_missing_log_is_no_history_not_a_crash(self, tmp_path):
         assert scan_history(tmp_path / "nope.csv") == []
 
+    def test_two_scans_on_one_day_count_as_the_last_one_not_the_sum(self, tmp_path):
+        # 24 September really happened: a 09:26 catch-up flagged 19 stocks and
+        # the 19:00 run flagged 8. Summing reported "27 triggered" as though it
+        # were one scan.
+        rows = [("2026-09-24", f"M{i}.NS", "analyse") for i in range(19)]
+        rows += [("2026-09-24", f"M{i}.NS", "skip") for i in range(19, 50)]
+        rows += [("2026-09-24", f"M{i}.NS", "analyse") for i in range(8)]
+        rows += [("2026-09-24", f"M{i}.NS", "skip") for i in range(8, 50)]
+        assert scan_history(self._log(tmp_path, rows)) == [8]
+
+    def test_a_rescan_that_clears_a_trigger_lowers_the_count(self, tmp_path):
+        path = self._log(tmp_path, [
+            ("2026-09-21", "A.NS", "analyse"), ("2026-09-21", "B.NS", "analyse"),
+            ("2026-09-21", "A.NS", "skip"), ("2026-09-21", "B.NS", "skip"),
+        ])
+        assert scan_history(path) == [0]
+
+    def test_a_rescan_that_adds_a_trigger_raises_the_count(self, tmp_path):
+        path = self._log(tmp_path, [
+            ("2026-09-21", "A.NS", "skip"),
+            ("2026-09-21", "A.NS", "analyse"), ("2026-09-21", "B.NS", "deferred"),
+        ])
+        assert scan_history(path) == [2]
+
+    def test_separate_days_are_still_separate_scans(self, tmp_path):
+        path = self._log(tmp_path, [
+            ("2026-09-21", "A.NS", "analyse"), ("2026-09-21", "A.NS", "analyse"),
+            ("2026-09-22", "A.NS", "analyse"),
+        ])
+        assert scan_history(path) == [1, 1]
+
+    def test_a_row_with_no_ticker_is_skipped_not_merged(self, tmp_path):
+        # Without a ticker two re-scan rows cannot be told apart, so counting
+        # them would resurrect the double-count this guards against.
+        path = self._log(tmp_path, [
+            ("2026-09-21", "A.NS", "analyse"), ("2026-09-21", "", "analyse"),
+            ("2026-09-21", "", "analyse"),
+        ])
+        assert scan_history(path) == [1]
+
 
 class TestScopeSection:
     def test_it_states_universe_sources_and_thresholds(self):
