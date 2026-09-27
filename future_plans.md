@@ -71,7 +71,11 @@ Output is about 500 tokens per stock for ~15 distinct stories.
   them again after a few weeks, especially for names outside the Nifty 50,
   which get no alias or sister list at all.
 - `get_global_news` still uses the ET/Mint feeds. The same search could serve
-  macro headlines.
+  macro headlines. A tz-comparison crash in that path silently dropped the
+  `india_rss` vendor on 2026-09-25 (fixed 2026-09-27, log.md trap 7.10); because
+  `news_data` is a fallback chain, the run completed on google_news and nothing
+  looked wrong. Worth remembering that a chain hides a broken vendor — the
+  per-vendor failures are only visible in `daily_refresh.log`.
 
 ### F2. Pre-compute the market analyst's indicators
 The market analyst spends several requests fetching prices and then up to
@@ -121,6 +125,19 @@ lookups with reasons, and what previous scans triggered. The re-analysing table
 gained an evidence column — Filed / Measured / Housekeeping.
 
 Scoring, ranking and the bullish/bearish wording were left alone.
+
+**Not yet exercised in production.** F8 landed on a Saturday, so 25-Sep's
+briefing predates it and the weekend ran nothing. The first live run is Monday
+2026-09-28 19:00 — read that briefing rather than assuming the scope section and
+exit code 4 behave. Both paths are verified by tests and by forcing a dry run with
+NSE made to fail (exit 4, warning at the top), but never by the scheduler.
+
+**Fixed 2026-09-27:** the history line summed every run on a date, so a day
+scanned twice was quoted as one scan — 24-Sep read as 27 triggers when it was 19
+in the morning catch-up and 8 in the evening. `scan_history` now counts each day's
+last scan; the real baseline is 5, 8, 7. Deliberately *not* fixed by adding a
+`run_at` column: last-wins gives the briefing the right number, and the column is
+only worth it if the two scans of one day ever need comparing.
 
 Still open from the original idea: surfacing an event date separately from a
 publication date in the briefing (the news module filters stale re-posts but does

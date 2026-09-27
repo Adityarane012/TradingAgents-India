@@ -98,7 +98,8 @@ is pre-computing the market analyst's indicators (F2 in `future_plans.md`).
 - `india_universe_runs.csv` — append-only history, one row per stock per run
 - `reports/<TICKER>_<date>/` — the full report tree
 - `refresh_<date>.md` — the day's briefing; `_dryrun.md` for dry runs
-- `refresh_log.csv` — every scan decision
+- `refresh_log.csv` — every scan decision, one row per stock per scan; carries
+  `scan_date` but no run time, so a day scanned twice needs last-wins (trap 7.11)
 - `review_latest.html` — dashboard
 - `backups/` — dated copies of the runs CSV
 - `daily_refresh.log` — the scheduled task's output, rotated at 5 MB
@@ -226,7 +227,14 @@ Two live failures shaped the rest:
 
 Both scheduled evenings before 2026-09-24 were missed because the laptop was off.
 Wake timers are now enabled and the task has `WakeToRun`; sleep is covered,
-shutdown is not.
+shutdown is not. Nor is being logged out: the task's `LogonType` is `Interactive`
+(`RunLevel Limited`), so it runs only while that user is logged on — a locked
+screen is fine, a signed-out session is not.
+
+Audited 2026-09-27 and correct: `State Ready`, `DaysOfWeek 62` (Mon–Fri), last
+run 25-Sep 19:00 → `LastTaskResult 0`, `NumberOfMissedRuns 0`,
+`DisallowStartIfOnBatteries False`, `StartWhenAvailable True`, `IgnoreNew` (which
+complements the lock file), `ExecutionTimeLimit PT1H5M` against the 20:00 window.
 
 ### 5.5 News: Google News India, filtered hard
 **Why:** for 15–22 Sep 2026, Yahoo returned **zero** articles for NESTLEIND,
@@ -336,6 +344,9 @@ Numbers that were measured, not assumed. Re-check before relying on them.
 | FRED India CPI | stale since March 2025 | 2026-09-20 |
 | Promoter pledging | unavailable: NSE endpoint empty, screener has none | 2026-09-21 |
 | Trigger counts observed | 5, 5, 7, 8, 14, 19 per scan — never zero | to 2026-09-27 |
+| Universe coverage | 50/50 have a good report, oldest 7 days (max age 14) | 2026-09-27 |
+| Runs CSV vs report tree | 93 `ok` rows, 93 report dirs, no orphans either way | 2026-09-27 |
+| Batch errors | none since 2026-09-24, when the LLM fallback fixes landed | 2026-09-27 |
 | `TATAMOTORS.NS` | dead since the demerger; use `TMCV.NS` | earlier |
 
 ---
@@ -383,6 +394,28 @@ passes the length it expects. Reusing the default silently returned no history.
 **7.9 An analyst tool's frequency argument matters.** The model chooses quarterly
 or annual; for NSE names quarterly cash flow often does not exist, so it saw
 nothing. Prefer annual, or fall back.
+
+**7.10 A naive datetime sentinel poisons a tz-aware sort.** The India RSS sort
+fell back to `datetime.min` for an item whose `pubDate` would not parse, and the
+ET/Mint feeds are tz-aware — so one undated headline raised `can't compare
+offset-naive and offset-aware datetimes` and lost the whole vendor. Nothing
+failed loudly, because `news_data` is a chain: the run fell through to
+google_news and finished while India headlines went missing. Normalise every
+sort key through `date_window.to_utc`, sentinel included. Seen live 2026-09-25,
+fixed 2026-09-27.
+
+**7.11 Appended-per-day logs double-count when a day is scanned twice.**
+`refresh_log.csv` holds one row per stock per scan and only a `scan_date`, never
+a run time. Summing by date reported 24 September as one scan of 27 triggers when
+it was 19 in the morning catch-up and 8 in the evening, inflating the baseline the
+briefing quotes. `scan_history` now keeps each stock's last decision for the day,
+so the count is the last scan of that date. Any new per-day aggregate over an
+append-only log needs the same care. Found 2026-09-27.
+
+**7.12 `india_universe_runs.csv` cannot be read with `cut` or `awk`.**
+`decision_excerpt` holds commas *and* embedded newlines inside quoted fields, so
+splitting on `,` reported 181 tickers and nine different column counts for a file
+that is actually 134 clean 9-field rows. Parse it with Python's `csv` module.
 
 ---
 
@@ -442,8 +475,11 @@ Full detail in `future_plans.md`. The honest ranking:
 2. ~~**F8 — tell a quiet scan from a broken one.**~~ **Done 2026-09-26**
    (`scan_health.py`). Four states, a scope section in every briefing, exit code
    4 for a scan that reported nothing while its sources failed, and an evidence
-   column in the table. Still open from that thread: showing an event date
-   separately from a publication date.
+   column in the table. **It has not yet run in production**: it landed on a
+   Saturday, and 25-Sep's briefing predates it, so the first real exercise is the
+   Monday 2026-09-28 19:00 run — read that briefing rather than assuming it.
+   Still open from that thread: showing an event date separately from a
+   publication date.
 3. **F0/F2 — count requests per stock, then pre-compute the market analyst's
    indicators.** The only real way to raise the daily stock count (~30–40% more).
 4. **Rating rubric + "track disconfirming evidence as rigorously as confirming
@@ -454,7 +490,16 @@ Full detail in `future_plans.md`. The honest ranking:
 5. **MoSPI macro API** — verified, ready to build, replaces FRED's stale India CPI.
 6. **Reddit with API credentials** — the only realistic second sentiment source;
    blocked on the user creating an OAuth app.
-7. **Also outstanding:** review the ICICIBANK and INFY reports (asked for long
+7. **A run time in `refresh_log.csv`** — deliberately not added when trap 7.11
+   was fixed. Last-wins gives the briefing the right number, but a day's two
+   scans still cannot be compared against each other. Worth a `run_at` column
+   only if that comparison is ever wanted; otherwise leave it.
+8. **Confirm whether the two Gemini keys are one key.** `GOOGLE_API_KEY` comes
+   from `.env` and `GEMINI_API_KEY` from the system environment; the client logs
+   "Both set. Using GOOGLE_API_KEY". If they are different keys there are two
+   500/day quotas, which changes the budget arithmetic in §2. Unverified — the
+   check was blocked as key material, so the user has to run it.
+9. **Also outstanding:** review the ICICIBANK and INFY reports (asked for long
    ago); alerting when a rating changes (F6); promoter pledging (no free source).
 
 ---
