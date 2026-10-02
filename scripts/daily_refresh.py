@@ -80,10 +80,15 @@ LOG_CSV = RESULTS / "refresh_log.csv"
 LOCK = RESULTS / "refresh.lock"
 LOG_FIELDS = ["scan_date", "ticker", "decision", "score", "triggers", "notes"]
 
-# ~15 requests per ticker against a 500/day free tier; 25 leaves room for a
-# retry or a manual one-off the same day. With --until the window usually
-# binds first (a ticker takes 3-5 minutes), and the rest wait for tomorrow.
-DEFAULT_MAX_TICKERS = 25
+# ~15 requests per ticker against a 500/day free tier, so the quota ceiling is
+# about 33 tickers; 30 leaves ~50 requests for a retry or an LLM fallback.
+#
+# Which limit binds depends on the window. Measured 2026-09-30/10-01: a ticker
+# takes a median 136s, so the old 19:00-20:00 hour fitted only ~25 and the
+# window bound first. At 19:00-21:00 time allows ~50 and the quota binds
+# instead, which is why this is 30 rather than higher. A manual batch the same
+# day still shares the 500 (see log.md trap 7.7).
+DEFAULT_MAX_TICKERS = 30
 
 _LOG = None  # the --log file handle, once opened
 

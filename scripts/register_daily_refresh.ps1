@@ -4,16 +4,22 @@ weekday evenings, so the Nifty 50 is scanned and the changed names re-analysed
 without anyone having to remember to do it.
 
     Install:   powershell -ExecutionPolicy Bypass -File scripts\register_daily_refresh.ps1
-    Custom:    ... -File scripts\register_daily_refresh.ps1 -Start 20:00 -End 21:00
+    Custom:    ... -File scripts\register_daily_refresh.ps1 -Start 19:00 -End 20:00
     Wake PC:   ... -File scripts\register_daily_refresh.ps1 -Wake
     Run now:   Start-ScheduledTask -TaskName "TradingAgents-India daily refresh"
     Status:    Get-ScheduledTaskInfo -TaskName "TradingAgents-India daily refresh"
     Remove:    Unregister-ScheduledTask -TaskName "TradingAgents-India daily refresh" -Confirm:$false
     Output:    %USERPROFILE%\.tradingagents\logs\daily_refresh.log  (+ refresh_<date>.md)
 
-Why 19:00-20:00 IST by default: NSE closes at 15:30 and publishes the day's
+Why 19:00-21:00 IST by default: NSE closes at 15:30 and publishes the day's
 FII/DII flows in the evening, and Gemini's free quota resets at 12:30 IST, so
 an evening run sees the final close and the day's filings with a full quota.
+
+The window was 19:00-20:00 until 2026-10-02. One hour fitted only about 25
+tickers at a measured median of 136s each, and on 1 October 29 triggered - so
+the window, not the quota, was the limit. Two hours lets the 500/day quota be
+the limit instead (~33 tickers; --max-tickers defaults to 30). The cost is that
+the laptop has to stay awake until 21:00.
 
 The window is enforced by the script itself (--until), not only by Task
 Scheduler: no analysis is started that would not finish by the end, the batch
@@ -39,7 +45,7 @@ The task runs as you, only while you are logged on, like any per-user task.
 #>
 param(
     [string]$Start = "19:00",
-    [string]$End   = "20:00",
+    [string]$End   = "21:00",
     [switch]$Wake
 )
 $ErrorActionPreference = "Stop"
