@@ -23,7 +23,6 @@ from tradingagents.agents.utils.agent_utils import (
     get_insider_transactions,
     get_macro_indicators,
     get_news,
-    get_prediction_markets,
     get_stock_data,
     get_verified_market_snapshot,
     resolve_instrument_identity,
@@ -291,7 +290,6 @@ class TradingAgentsGraph:
                     get_global_news,
                     get_insider_transactions,
                     get_macro_indicators,
-                    get_prediction_markets,
                 ]
             ),
             "fundamentals": ToolNode(

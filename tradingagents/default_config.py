@@ -111,7 +111,6 @@ FREE_TIER_CONFIG = {
         "fundamental_data": "yfinance",
         "news_data": "google_news,india_rss,yfinance",
         "macro_data": "fred",
-        "prediction_markets": "polymarket",
     },
     # The dominant token cost is not any single payload (all tools together are
     # ~6,100 tokens) but the tool-call loop: the agent re-sends its whole
@@ -308,7 +307,6 @@ DEFAULT_CONFIG = _apply_env_overrides({
                                               # ticker on to the next vendor. get_global_news also
                                               # accepts "india_rss" (ET + Mint RSS feeds).
         "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
-        "prediction_markets": "polymarket",  # Options: polymarket (keyless)
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {

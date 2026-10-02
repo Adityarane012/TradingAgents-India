@@ -230,7 +230,7 @@ cp .env.example .env
 
 ### Running at zero cost
 
-Every data source this project needs is keyless: yfinance for prices and statements, NSE/RBI/screener.in for the India context, Reddit RSS and StockTwits for sentiment, Polymarket for prediction markets. The only thing that costs money is the LLM, and one free tier is large enough to run a whole universe.
+Every data source this project needs is keyless: yfinance for prices and statements, NSE/RBI/screener.in for the India context, Reddit RSS and StockTwits for sentiment. The only thing that costs money is the LLM, and one free tier is large enough to run a whole universe.
 
 ```bash
 python scripts/analyze_india_universe.py --free --resume --no-reddit

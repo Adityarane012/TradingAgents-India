@@ -20,7 +20,6 @@ from .errors import (
 from .fred import get_macro_data as get_fred_macro_data
 from .google_news_india import get_news_google_india
 from .india_news import get_global_news_india
-from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
 from .sec_edgar import (
     get_balance_sheet as get_sec_edgar_balance_sheet,
     get_cashflow as get_sec_edgar_cashflow,
@@ -76,19 +75,12 @@ TOOLS_CATEGORIES = {
             "get_macro_indicators",
         ]
     },
-    "prediction_markets": {
-        "description": "Market-implied probabilities for forward-looking events",
-        "tools": [
-            "get_prediction_markets",
-        ]
-    }
 }
 
 VENDOR_LIST = [
     "yfinance",
     "sec_edgar",
     "fred",
-    "polymarket",
     "alpha_vantage",
     "india_rss",
     "google_news",
@@ -99,7 +91,7 @@ VENDOR_LIST = [
 # sentinel instead of aborting the run (a bad LLM-supplied indicator, a missing
 # key, or a network blip should not crash an analysis over flavour data). Core
 # categories (prices, fundamentals, news) still raise so a broken primary is loud.
-OPTIONAL_CATEGORIES = {"macro_data", "prediction_markets"}
+OPTIONAL_CATEGORIES = {"macro_data"}
 
 # Mapping of methods to their vendor-specific implementations
 VENDOR_METHODS = {
@@ -157,10 +149,6 @@ VENDOR_METHODS = {
     # macro_data
     "get_macro_indicators": {
         "fred": get_fred_macro_data,
-    },
-    # prediction_markets
-    "get_prediction_markets": {
-        "polymarket": get_polymarket_prediction_markets,
     },
 }
 

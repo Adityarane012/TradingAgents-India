@@ -1,8 +1,7 @@
-"""Insider filings and prediction-market odds are bounded by the run's trade date.
+"""Insider filings are bounded by the run's trade date.
 
-Neither tool takes a date from the model, so the run's trade_date is injected from
-graph state. Insider filings carry dates and are filtered to it; Polymarket serves
-only live odds, so a historical run withholds them.
+The tool takes no date from the model, so the run's trade_date is injected from
+graph state and the filings are filtered to it.
 """
 
 from __future__ import annotations
@@ -13,8 +12,8 @@ from unittest import mock
 import pandas as pd
 import pytest
 
-from tradingagents.agents.utils import news_data_tools, prediction_markets_tools
-from tradingagents.dataflows import alpha_vantage_news, polymarket, y_finance
+from tradingagents.agents.utils import news_data_tools
+from tradingagents.dataflows import alpha_vantage_news, y_finance
 
 
 def _insider_frame(*dates):
@@ -63,22 +62,8 @@ def test_alpha_vantage_insider_filings_after_the_date_are_dropped():
 
 
 @pytest.mark.unit
-def test_polymarket_withholds_live_odds_from_a_historical_run():
-    with mock.patch.object(polymarket, "_request", side_effect=AssertionError("must not fetch")):
-        out = polymarket.get_prediction_markets("Fed rate cut", curr_date="2025-06-01")
-    assert "withheld" in out
-
-
-@pytest.mark.unit
-def test_polymarket_serves_a_current_run():
-    with mock.patch.object(polymarket, "_request", return_value={"events": []}) as req:
-        polymarket.get_prediction_markets("Fed rate cut", curr_date=polymarket.get_current_date())
-    req.assert_called_once()
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("tool", [news_data_tools.get_insider_transactions,
-                                  prediction_markets_tools.get_prediction_markets], ids=lambda t: t.name)
+@pytest.mark.parametrize("tool", [news_data_tools.get_insider_transactions],
+                         ids=lambda t: t.name)
 def test_trade_date_is_injected_not_model_visible(tool):
     assert "trade_date" in tool.func.__code__.co_varnames
     props = tool.tool_call_schema.model_json_schema()["properties"]
