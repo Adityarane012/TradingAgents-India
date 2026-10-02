@@ -205,15 +205,24 @@ Proven repeatedly in practice: runs were killed four times on 2026-09-24 and the
 lock always released with the CSV intact at 89/89 complete rows.
 
 ### 5.4 Scheduling: a bounded evening window, with catch-up
-The task runs weekdays 19:00–20:00 IST (NSE closes 15:30 and publishes FII/DII in
+The task runs weekdays 19:00–21:00 IST (NSE closes 15:30 and publishes FII/DII in
 the evening; Gemini's quota resets ~12:30 IST, so an evening run sees the final
 close with a full quota).
 
-The window is enforced **by the script**, not only by Task Scheduler:
-- no stock is started that would not finish by ~19:57 (the estimate is the
+**Widened from one hour to two on 2026-10-02**, with `--max-tickers` 25 → 30. A
+stock takes a median 136s, so one hour fitted only ~25 and the clock bound before
+the quota did: on 1 October 29 triggered and four were deferred with most of an
+hour's quota unspent. Two hours makes the quota the limit (~33 stocks at ~15
+requests against 500/day). Raising the window alone would have changed nothing,
+because the cap would simply have bound first. The cost is that the laptop has to
+stay awake an hour longer.
+
+The window is enforced **by the script**, not only by Task Scheduler (times below
+are for a 21:00 end, derived from `--until`):
+- no stock is started that would not finish by ~20:57 (the estimate is the
   slowest stock seen this run, never below 240s);
-- the batch is killed at ~19:59 if still running;
-- a run starting after ~19:50 does nothing.
+- the batch is killed at ~20:59 if still running;
+- a run starting after ~20:50 does nothing.
 
 Two live failures shaped the rest:
 - **A run must never analyse an open session.** On 2026-09-24 Windows ran the
@@ -510,6 +519,7 @@ Do not re-propose these without new evidence.
 
 | Option | Why not |
 |---|---|
+| **Polymarket / any prediction market** | Removed entirely 2026-10-02: prediction markets fall under India's gambling prohibition, so this fork should not be able to query one. It was also measurably worthless here — 28 calls, 28 failures, zero successes, each a 30s connect timeout, costing ~6 minutes of the 1 October window. Do not re-add it as "free keyless data" |
 | **Marketaux** | Free plan: 3 articles per request, no entity sentiment — less than the free Google feed |
 | **Finnhub** | Historical candles are premium; free tier is US equities; India ~$50/month for data yfinance gives free |
 | **MCP-India-Stack** | GSTIN/PAN/tax/court tools, no filings or ownership; its market tools wrap yfinance; the pipeline cannot consume MCP anyway |
