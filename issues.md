@@ -10,12 +10,14 @@
 
 ## Status — rechecked against the code on 2026-09-22
 
-**All nine issues are resolved and live on `main` of TradingAgents-India.**
+**All nine audit issues are resolved and live on `main` of TradingAgents-India.**
 Each row below was re-verified in the current source, not copied from the
 earlier note. The branch named in the 2026-09-17 note was merged and deleted.
-Nothing in this file is still open. What remains undone from the wider India
-work, and why, is tracked in `suggestions.md` (status table) and
-`future_plans.md`.
+What remains undone from the wider India work, and why, is tracked in
+`suggestions.md` (status table) and `future_plans.md`.
+
+**One issue is open: [I-011](#i-011)**, raised 2026-10-02 from the daily-refresh
+audit rather than the original codebase audit. The nine below are closed.
 
 Where each fix now lives:
 
@@ -105,6 +107,7 @@ FII/DII split within public holding, which NSE's filings do not break out, and
 | [I-004](#i-004) | Fundamentals analyst has no currency context — misinterprets INR Crores as USD | Bug | High | Small | 🟠 Intermediate |
 | [I-010](#i-010) | India-aware macro guidance in news analyst system prompt | Feature | High | Small | 🟠 Intermediate |
 | [I-005](#i-005) | Auto-select region-appropriate `global_news_queries` based on ticker suffix | Feature | High | Medium | 🔴 Advanced |
+| [I-011](#i-011) | Daily refresh defers triggered stocks once the universe outpaces one evening's capacity | Enhancement | Medium | Medium | 🟠 Intermediate |
 
 ---
 
@@ -649,6 +652,82 @@ if "global_news_queries" not in user_config:
     else:
         self.config["global_news_queries"] = REGIONAL_NEWS_QUERIES["US"]
 ```
+
+
+---
+
+### I-011
+
+**Title:** Daily refresh defers triggered stocks once the universe outpaces one evening's capacity
+
+**Labels:** `enhancement` `automation` `capacity` `india`
+
+**Priority:** Medium (rises to High through a results season)  
+**Effort:** Medium  
+**Level:** 🟠 Intermediate  
+
+**Description:**
+
+`scripts/daily_refresh.py` scans all 50 Nifty names and re-analyses only those
+that triggered. For the first two weeks that was comfortable. It no longer is:
+
+| Scan | Triggered | Analysed | Deferred |
+| :--- | :--- | :--- | :--- |
+| 2026-09-25 | 7 | 6 | 1 unfinished |
+| 2026-09-28 | 17 | 9 | 8 unfinished |
+| 2026-09-29 | 23 | 23 | 0 |
+| 2026-09-30 | 13 | 13 | 0 |
+| 2026-10-01 | 29 | 23 | 4 deferred + 2 unfinished |
+
+1 October was the first time the `--max-tickers` cap bound rather than the
+clock. Triggers are overwhelmingly filing-driven — price moves contribute only
+2–7 per scan, the rest are NSE announcements — so the rate tracks the filing
+calendar, not volatility. Quarter-end shareholding filings and the Q2 results
+season both land in October, so the trigger count should be expected to stay
+high or climb.
+
+Deferral itself is correct and not a bug: a deferred stock keeps its triggers,
+so the next run re-selects it, and `log.md` §5.2 is explicit that this is the
+design. Two things make it worth tracking anyway:
+
+1. **Starvation risk at the bottom of the ranking.** All four stocks deferred on
+   1 October scored 30, the lowest tier. If the backlog persists across several
+   runs, a low-scoring stock could be crowded out repeatedly. The 14-day
+   `--max-age-days` trigger escalates with age and eventually rescues it, so the
+   design self-corrects — but the correction is slow, and nothing currently
+   reports that a given stock has been deferred *n* runs in a row.
+2. **The briefing does not distinguish a queue from a backlog.** "deferred 4"
+   reads the same whether those four are analysed tomorrow or have been waiting
+   since Monday.
+
+**Already done (2026-10-02), so measure before building anything:**
+
+- The window moved from 19:00–20:00 to 19:00–21:00 and `--max-tickers` from 25
+  to 30, which should absorb a 29-trigger day. At a measured median of 136s per
+  stock the quota (~33 stocks at ~15 requests each against 500/day) is now the
+  binding limit rather than the clock.
+- Polymarket was removed, recovering roughly six minutes per run that had been
+  spent on connect timeouts.
+
+**Possible directions, cheapest first:**
+
+- Count consecutive deferrals per stock in `refresh_log.csv` and surface
+  "deferred 3 runs running" in the briefing — turns an invisible backlog into a
+  visible one for the cost of one column.
+- Make the age escalation steeper, so a repeatedly deferred stock climbs the
+  ranking faster than the current `W_STALE + (age - max_age_days)`.
+- F0/F2 from `future_plans.md`: cut requests per stock and the quota ceiling
+  rises for everyone. The only option that raises real capacity rather than
+  reallocating it.
+
+**Files:**
+
+- `scripts/daily_refresh.py` — `DEFAULT_MAX_TICKERS`, `select()` call
+- `tradingagents/dataflows/refresh_triggers.py` — `select()`, `W_STALE`
+- `tradingagents/dataflows/scan_health.py` — where a backlog line would go
+
+**Evidence:** `~/.tradingagents/logs/daily_refresh.log` (run boundaries and
+"Not finished this run" lines) and `refresh_log.csv` (per-scan decisions).
 
 ---
 
