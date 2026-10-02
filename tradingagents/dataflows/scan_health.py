@@ -28,6 +28,16 @@ Three states worth distinguishing:
 A zero-trigger day is called out even when nothing failed: the observed history
 is 5, 8, 14, 19 triggers, so zero has never happened and deserves a second look
 rather than silence.
+
+One caveat to keep in mind when changing this: **healthy is the fallback.**
+``failed_lookups`` is derived purely from ``Assessment.notes``, so if notes ever
+stop being populated — a renamed attribute, a lookup that swallows its own
+errors — every scan reports healthy and the feature silently stops working in
+the one direction that matters. It relies on the error contract in log.md §4.8.
+
+Proven earned on 2026-10-02 by killing NSE's socket underneath the real code
+path (not by substituting the lookups): 50 of 50 stocks collected notes and the
+run exited 4. Re-prove it that way if the notes plumbing changes.
 """
 
 from __future__ import annotations

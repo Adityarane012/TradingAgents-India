@@ -148,7 +148,15 @@ Break these and the code will look wrong to whoever comes next.
 7. **No hardcoded market "facts".** No "Nifty P/E is ~22x", no "USD/INR is 83–86"
    (it is ~95.8 now), no named F&O expiry weekday (NSE has changed it). Anything
    that goes stale is fetched or omitted.
-8. **Push only when asked.** The user runs `git push` themselves.
+8. **A vendor failure must subclass `VendorError`.** `evaluate` catches only
+   that, and turns it into an `Assessment` note — which is the sole input to
+   scan health, so the error type is what decides whether a broken source shows
+   up as "degraded" or kills the scan. The India chain is
+   `IndiaSourceUnavailable` → `IndiaDataError` → `VendorError`, and NSE's
+   `_get_json` converts HTTP and socket errors into it. Raising anything else
+   from a lookup takes the whole scan down: proved on 2026-09-27 with a plain
+   `Exception`, which propagated out of `evaluate` and ended the run.
+9. **Push only when asked.** The user runs `git push` themselves.
 
 ---
 
@@ -354,6 +362,8 @@ Numbers that were measured, not assumed. Re-check before relying on them.
 | Promoter pledging | unavailable: NSE endpoint empty, screener has none | 2026-09-21 |
 | Trigger counts observed | 5, 5, 7, 8, 14, 19 per scan — never zero | to 2026-09-27 |
 | Universe coverage | 50/50 have a good report, oldest 7 days (max age 14) | 2026-09-27 |
+| Scan health's degraded path, end to end | proven: NSE's socket killed → 50/50 notes, exit 4 | 2026-10-02 |
+| NSE circuit breaker | opens after 3 failed calls, so a degraded scan costs 3 not 100 | 2026-10-02 |
 | Runs CSV vs report tree | 93 `ok` rows, 93 report dirs, no orphans either way | 2026-09-27 |
 | Batch errors | none since 2026-09-24, when the LLM fallback fixes landed | 2026-09-27 |
 | `TATAMOTORS.NS` | dead since the demerger; use `TMCV.NS` | earlier |
