@@ -36,9 +36,14 @@ So:
 
 > **Done so far:** F1 (Google News India) and F4 (FinBERT scoring) on
 > 2026-09-22, the earnings-quality block on 2026-09-25, F8 (scan health) on
-> 2026-09-26. The next highest-value items are **F7**, which is the only thing
-> that tells you whether any of this produces good calls, then F0 and F2, which
-> are what actually raise the number of stocks a day.
+> 2026-09-26. On 2026-10-02 Polymarket was removed (illegal in India, and 28
+> failed calls for 28 attempts) and the evening window went to two hours with
+> the cap at 30, which lifted the ceiling from ~25 stocks to ~30.
+>
+> The next highest-value items are **F7**, which is the only thing that tells
+> you whether any of this produces good calls, then F0 and F2 — now the only
+> remaining way to raise the number of stocks a day, because the quota binds
+> rather than the clock.
 
 ### F0. Measure requests per ticker before optimising
 Add an LLM callback that counts calls per agent, and write the totals to the
@@ -88,6 +93,11 @@ day. Confirm the figure with F0 first. The trade-off is that the model can no
 longer choose its indicators. Keep the tool path behind a config flag.
 *Effort: medium.*
 
+Worth more now than when this was written: until 2026-10-02 the one-hour window
+bound before the quota did, so saved requests bought nothing. With a two-hour
+window the quota is the limit, so every request F2 saves converts directly into
+another stock analysed.
+
 ### F3. One news fetch per ticker, shared by both analysts
 The news analyst and the sentiment analyst each fetch company news. Fetch once,
 de-duplicate, and give each analyst the part it needs. This cuts duplicate
@@ -126,11 +136,17 @@ gained an evidence column — Filed / Measured / Housekeeping.
 
 Scoring, ranking and the bullish/bearish wording were left alone.
 
-**Not yet exercised in production.** F8 landed on a Saturday, so 25-Sep's
-briefing predates it and the weekend ran nothing. The first live run is Monday
-2026-09-28 19:00 — read that briefing rather than assuming the scope section and
-exit code 4 behave. Both paths are verified by tests and by forcing a dry run with
-NSE made to fail (exit 4, warning at the top), but never by the scheduler.
+**Proven in production, 2026-09-28 to 10-01.** Four scheduled runs, all four
+reporting `Scan healthy: all 50 stocks checked against every source`, a scope
+section in every briefing, and the history rolling correctly (5, 8, 7 → 17 → 23
+→ 13).
+
+The degraded path was proven separately on 2026-10-02 by killing NSE's socket
+underneath the real code path — 50 of 50 stocks collected notes and the run
+exited 4. That test matters because **healthy is the fallback**: `failed_lookups`
+comes only from `Assessment.notes`, so broken notes plumbing would report healthy
+forever. Four healthy scans are not on their own evidence that the check works;
+the socket test is. Re-run it the same way if that plumbing changes.
 
 **Fixed 2026-09-27:** the history line summed every run on a date, so a day
 scanned twice was quoted as one scan — 24-Sep read as 27 triggers when it was 19

@@ -248,10 +248,14 @@ shutdown is not. Nor is being logged out: the task's `LogonType` is `Interactive
 (`RunLevel Limited`), so it runs only while that user is logged on — a locked
 screen is fine, a signed-out session is not.
 
-Audited 2026-09-27 and correct: `State Ready`, `DaysOfWeek 62` (Mon–Fri), last
-run 25-Sep 19:00 → `LastTaskResult 0`, `NumberOfMissedRuns 0`,
-`DisallowStartIfOnBatteries False`, `StartWhenAvailable True`, `IgnoreNew` (which
-complements the lock file), `ExecutionTimeLimit PT1H5M` against the 20:00 window.
+Audited after re-registering on 2026-10-02 and correct: `State Ready`, one task
+only, `DaysOfWeek 62` (Mon–Fri), arguments `--until 21:00 --catch-up --log …`,
+`ExecutionTimeLimit PT2H5M`, `WakeToRun True`, `DisallowStartIfOnBatteries False`,
+`StartWhenAvailable True`, `IgnoreNew` (which complements the lock file).
+Re-registering replaces by name (`Register-ScheduledTask -Force`), so it cannot
+leave two tasks behind — but it rebuilds the settings from the script's
+parameters, so omitting `-Wake` silently turns `WakeToRun` off. Check it after
+every re-registration.
 
 ### 5.5 News: Google News India, filtered hard
 **Why:** for 15–22 Sep 2026, Yahoo returned **zero** articles for NESTLEIND,
@@ -347,7 +351,8 @@ Numbers that were measured, not assumed. Re-check before relying on them.
 | `gemini-2.5-flash` | retired: "no longer available to new users" (404) | 2026-09-24 |
 | `gemini-3.5-flash-lite` | works; first understudy | 2026-09-24 |
 | `gemini-3.1-flash`, `gemini-3.6-flash-lite`, `gemini-2.0-flash` | 404 | 2026-09-24 |
-| Cost per stock | ~15 LLM requests, 90–350s wall time | ongoing |
+| Cost per stock | ~15 LLM requests; median 136s, max 204s over 36 runs | 2026-10-01 |
+| Evening throughput ceiling | ~25 stocks in one hour, ~30 in two (quota-bound) | 2026-10-02 |
 | Yahoo news for NSE names | **zero** articles for 4 of 4 tested over a week | 2026-09-22 |
 | Google News India per stock/week | 36–100 items, 30–70 outlets | 2026-09-22 |
 | Yahoo NSE sector indices with history | only ^NSEBANK, ^CNXIT, ^CNXPHARMA | 2026-09-22 |
@@ -360,12 +365,13 @@ Numbers that were measured, not assumed. Re-check before relying on them.
 | MoSPI API | keyless, live; WPI Apr-2026 = 167; needs legacy TLS | 2026-09-22 |
 | FRED India CPI | stale since March 2025 | 2026-09-20 |
 | Promoter pledging | unavailable: NSE endpoint empty, screener has none | 2026-09-21 |
-| Trigger counts observed | 5, 5, 7, 8, 14, 19 per scan — never zero | to 2026-09-27 |
-| Universe coverage | 50/50 have a good report, oldest 7 days (max age 14) | 2026-09-27 |
+| Trigger counts observed | 5, 5, 7, 8, 13, 14, 17, 19, 23, 29 per scan — never zero | to 2026-10-01 |
+| What triggers | filings dominate; price contributes only 2–7 per scan | 2026-10-01 |
+| Universe coverage | 50/50 have a good report, oldest 12 days (max age 14) | 2026-10-02 |
 | Scan health's degraded path, end to end | proven: NSE's socket killed → 50/50 notes, exit 4 | 2026-10-02 |
 | NSE circuit breaker | opens after 3 failed calls, so a degraded scan costs 3 not 100 | 2026-10-02 |
-| Runs CSV vs report tree | 93 `ok` rows, 93 report dirs, no orphans either way | 2026-09-27 |
-| Batch errors | none since 2026-09-24, when the LLM fallback fixes landed | 2026-09-27 |
+| Runs CSV vs report tree | `ok` rows and report dirs match exactly, no orphans | 2026-10-02 |
+| Batch errors | none since 2026-09-24; 68 consecutive clean analyses to 1-Oct | 2026-10-02 |
 | `TATAMOTORS.NS` | dead since the demerger; use `TMCV.NS` | earlier |
 
 ---
@@ -445,7 +451,7 @@ that is actually 134 clean 9-field rows. Parse it with Python's `csv` module.
 python scripts/daily_refresh.py --dry-run
 
 # The real thing (what the scheduled task runs)
-python scripts/daily_refresh.py --until 20:00 --catch-up --log <path>
+python scripts/daily_refresh.py --until 21:00 --catch-up --log <path>
 
 # One or more specific stocks for a given session
 python scripts/analyze_india_universe.py --free --no-reddit --resume \
@@ -483,24 +489,40 @@ echoed.
 
 Full detail in `future_plans.md`. The honest ranking:
 
-1. **F7 — validate the ratings (highest value, not started).** After 2–3 weeks of
-   daily refresh, score past ratings against what prices did next, using
-   upstream's backtester. **Nothing in this system has ever been checked against
-   outcomes.** This matters more than any new data source, and more so now: the
-   mix has drifted bullish (2 Buy, 13 Overweight, 34 Hold on 2026-09-25, from 8
-   Overweight and 41 Hold on 2026-09-21). That may be a real market move, or the
-   richer news feed shifting tone, or selection bias from filing-triggered stocks.
-   Unknown until measured. The user asked to be reminded of this.
+1. **F7 — validate the ratings (highest value, not started).** Score past ratings
+   against what prices did next, using upstream's backtester. **Nothing in this
+   system has ever been checked against outcomes.** This matters more than any
+   new data source, and the case has only got stronger — the mix keeps drifting
+   towards conviction on both sides:
+
+   | | 21-Sep | 25-Sep | 02-Oct |
+   |---|---|---|---|
+   | Hold | 41 | 34 | 25 |
+   | Overweight | 8 | 13 | 16 |
+   | Buy | — | 2 | 5 |
+   | Underweight | 1 | 1 | 3 |
+   | Sell | — | — | 1 |
+
+   21 bullish against 4 bearish, and the first `Sell` appeared in October. That
+   may be a real market move, or the richer news feed shifting tone, or selection
+   bias from filing-triggered stocks. Unknown until measured. The precondition is
+   now met: 202 rows across two weeks with 50/50 coverage, so there is history to
+   score. The user asked to be reminded of this.
 2. ~~**F8 — tell a quiet scan from a broken one.**~~ **Done 2026-09-26**
    (`scan_health.py`). Four states, a scope section in every briefing, exit code
    4 for a scan that reported nothing while its sources failed, and an evidence
-   column in the table. **It has not yet run in production**: it landed on a
-   Saturday, and 25-Sep's briefing predates it, so the first real exercise is the
-   Monday 2026-09-28 19:00 run — read that briefing rather than assuming it.
-   Still open from that thread: showing an event date separately from a
-   publication date.
+   column in the table. **Proven in production 2026-09-28 to 10-01**: four
+   scheduled runs, all four `Scan healthy: all 50 stocks checked against every
+   source`, scope section present in every briefing, and the history rolling
+   correctly (5, 8, 7 → 17 → 23 → 13) after the per-scan counting fix. The
+   degraded path was proven separately on 2026-10-02 (§6). Still open from that
+   thread: showing an event date separately from a publication date.
 3. **F0/F2 — count requests per stock, then pre-compute the market analyst's
-   indicators.** The only real way to raise the daily stock count (~30–40% more).
+   indicators** (~30–40% more stocks). No longer the *only* way to raise the
+   count — widening the window on 2026-10-02 took the ceiling from ~25 to ~30 by
+   spending wall-clock time instead — but it is the only one that raises the
+   **quota** ceiling, which is what now binds. Everything else just reallocates
+   the same 500 requests.
 4. **Rating rubric + "track disconfirming evidence as rigorously as confirming
    evidence"** (from Anthropic's `financial-services` `thesis-tracker` skill,
    Apache-2.0). Nothing obliges the agents to hunt the counter-case. Deferred
